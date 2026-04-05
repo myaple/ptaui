@@ -1,69 +1,70 @@
 use crate::app::{AddTxField, App};
+use crate::ui::{centered_modal, render_dim};
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
 
-pub fn render(f: &mut Frame, app: &App, area: Rect) {
+pub fn render_modal(f: &mut Frame, app: &App) {
     if app.add_tx_form.is_none() {
         return;
     }
 
+    render_dim(f);
+
+    let area = centered_modal(100, 30, f.area());
+    f.render_widget(Clear, area);
+
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
         .split(area);
 
     render_form(f, app, chunks[0]);
-    render_help_and_suggestions(f, app, chunks[1]);
-}
-
-fn field_style(focused: bool) -> Style {
-    if focused {
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::White)
-    }
+    render_suggestions_and_help(f, app, chunks[1]);
 }
 
 fn label_style(focused: bool) -> Style {
     if focused {
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::DarkGray)
     }
 }
 
-fn render_form(f: &mut Frame, app: &App, area: Rect) {
+fn field_style(focused: bool) -> Style {
+    if focused {
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::White)
+    }
+}
+
+fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let form = app.add_tx_form.as_ref().unwrap();
 
-    let fields = [
-        (AddTxField::Date, "Date       ", &form.date),
-        (AddTxField::Payee, "Payee      ", &form.payee),
-        (AddTxField::Narration, "Narration  ", &form.narration),
+    let fields: &[(AddTxField, &str, &str)] = &[
+        (AddTxField::Date,        "Date       ", &form.date),
+        (AddTxField::Payee,       "Payee      ", &form.payee),
+        (AddTxField::Narration,   "Narration  ", &form.narration),
         (AddTxField::FromAccount, "From Acct  ", &form.from_account),
-        (AddTxField::ToAccount, "To Acct    ", &form.to_account),
-        (AddTxField::Amount, "Amount     ", &form.amount),
-        (AddTxField::Currency, "Currency   ", &form.currency),
+        (AddTxField::ToAccount,   "To Acct    ", &form.to_account),
+        (AddTxField::Amount,      "Amount     ", &form.amount),
+        (AddTxField::Currency,    "Currency   ", &form.currency),
     ];
 
     let mut lines: Vec<Line> = vec![Line::from("")];
 
-    for (field, label, value) in &fields {
+    for (field, label, value) in fields {
         let focused = form.focused == *field;
         let cursor = if focused { "█" } else { " " };
-        let value_display = format!("{}{}", value, cursor);
         lines.push(Line::from(vec![
             Span::styled(format!("  {}: ", label), label_style(focused)),
             Span::styled(
-                format!("{:<35}", value_display),
+                format!("{:<32}{}", value, cursor),
                 field_style(focused),
             ),
         ]));
@@ -74,36 +75,30 @@ fn render_form(f: &mut Frame, app: &App, area: Rect) {
     let confirm_focused = form.focused == AddTxField::Confirm;
     lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
+        if confirm_focused { "  ► [ SAVE TRANSACTION ] ◄" } else { "    [ SAVE TRANSACTION ]  " },
         if confirm_focused {
-            "  ► [ SAVE TRANSACTION ] ◄"
-        } else {
-            "    [ SAVE TRANSACTION ]  "
-        },
-        if confirm_focused {
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Green)
-                .add_modifier(Modifier::BOLD)
+            Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::DarkGray)
         },
     )]));
 
-    // Error message
     if let Some(ref err) = form.error {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            format!("  Error: {}", err),
+            format!("  ✗ {}", err),
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         )));
     }
 
-    let para = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(" Add Transaction "));
-    f.render_widget(para, area);
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(Block::default().borders(Borders::ALL).title(" Add Transaction ")),
+        area,
+    );
 }
 
-fn render_help_and_suggestions(f: &mut Frame, app: &App, area: Rect) {
+fn render_suggestions_and_help(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let form = app.add_tx_form.as_ref().unwrap();
 
     let chunks = Layout::default()
@@ -111,55 +106,54 @@ fn render_help_and_suggestions(f: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
-    // Suggestions — context-aware for Payee, FromAccount, ToAccount
+    // ── Suggestions ──────────────────────────────────────────────────────────
     let suggestions = form.suggestions_for_current();
     let (placeholder, pane_title) = match form.focused {
-        AddTxField::Payee => (" Start typing to see payees...", " Suggestions — Payee "),
-        AddTxField::FromAccount | AddTxField::ToAccount => (" Start typing to see accounts...", " Suggestions — Account "),
-        _ => (" (no suggestions for this field)", " Suggestions "),
+        AddTxField::Payee =>
+            (" Start typing to see payees…", " Suggestions — Payee "),
+        AddTxField::FromAccount | AddTxField::ToAccount =>
+            (" Start typing to see accounts…", " Suggestions — Account "),
+        _ =>
+            (" (no suggestions for this field)", " Suggestions "),
     };
 
-    let suggestion_items: Vec<ListItem> = suggestions
-        .iter()
-        .map(|s| ListItem::new(Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Cyan)))))
-        .collect();
-
-    let suggestions_widget = if suggestion_items.is_empty() {
-        List::new(vec![ListItem::new(Line::from(Span::styled(
+    let items: Vec<ListItem> = if suggestions.is_empty() {
+        vec![ListItem::new(Line::from(Span::styled(
             placeholder,
             Style::default().fg(Color::DarkGray),
-        )))])
+        )))]
     } else {
-        List::new(suggestion_items)
+        suggestions
+            .iter()
+            .map(|s| ListItem::new(Line::from(Span::styled(
+                s.as_str(),
+                Style::default().fg(Color::Cyan),
+            ))))
+            .collect()
     };
 
     f.render_widget(
-        suggestions_widget.block(Block::default().borders(Borders::ALL).title(pane_title)),
+        List::new(items).block(Block::default().borders(Borders::ALL).title(pane_title)),
         chunks[0],
     );
 
-    // Help
-    let help_lines = vec![
+    // ── Help ─────────────────────────────────────────────────────────────────
+    let help = Paragraph::new(vec![
         Line::from(""),
         Line::from(Span::styled("  Navigation", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled("  Tab / ↓   Next field", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  Shift+Tab Previous field", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  Enter     Confirm/Submit", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  Esc       Cancel", Style::default().fg(Color::White))),
+        Line::from(Span::styled("  Tab / ↓    Next field", Style::default().fg(Color::White))),
+        Line::from(Span::styled("  Shift+Tab  Prev field", Style::default().fg(Color::White))),
+        Line::from(Span::styled("  Enter      Confirm", Style::default().fg(Color::White))),
+        Line::from(Span::styled("  Esc        Cancel", Style::default().fg(Color::White))),
         Line::from(""),
         Line::from(Span::styled("  Autocomplete (Tab)", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled("  Payee, From Acct, To Acct", Style::default().fg(Color::White))),
+        Line::from(Span::styled("  Payee, From, To", Style::default().fg(Color::White))),
         Line::from(""),
         Line::from(Span::styled("  Double-entry", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled("  From → debit source", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  To   → credit target", Style::default().fg(Color::DarkGray))),
-        Line::from(""),
-        Line::from(Span::styled("  Example:", Style::default().fg(Color::Yellow))),
-        Line::from(Span::styled("  From: Assets:Checking", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  To:   Expenses:Food", Style::default().fg(Color::DarkGray))),
-    ];
+        Line::from(Span::styled("  From → source (debit)", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("  To   → target (credit)", Style::default().fg(Color::DarkGray))),
+    ])
+    .block(Block::default().borders(Borders::ALL).title(" Help "));
 
-    let help = Paragraph::new(help_lines)
-        .block(Block::default().borders(Borders::ALL).title(" Help "));
     f.render_widget(help, chunks[1]);
 }
