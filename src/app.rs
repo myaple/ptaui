@@ -191,26 +191,29 @@ pub enum AddAccountField {
     SubName,
     Currencies,
     Date,
+    InitialBalance,
     Confirm,
 }
 
 impl AddAccountField {
     pub fn next(&self) -> Self {
         match self {
-            Self::AccountType => Self::SubName,
-            Self::SubName => Self::Currencies,
-            Self::Currencies => Self::Date,
-            Self::Date => Self::Confirm,
-            Self::Confirm => Self::AccountType,
+            Self::AccountType    => Self::SubName,
+            Self::SubName        => Self::Currencies,
+            Self::Currencies     => Self::Date,
+            Self::Date           => Self::InitialBalance,
+            Self::InitialBalance => Self::Confirm,
+            Self::Confirm        => Self::AccountType,
         }
     }
     pub fn prev(&self) -> Self {
         match self {
-            Self::AccountType => Self::Confirm,
-            Self::SubName => Self::AccountType,
-            Self::Currencies => Self::SubName,
-            Self::Date => Self::Currencies,
-            Self::Confirm => Self::Date,
+            Self::AccountType    => Self::Confirm,
+            Self::SubName        => Self::AccountType,
+            Self::Currencies     => Self::SubName,
+            Self::Date           => Self::Currencies,
+            Self::InitialBalance => Self::Date,
+            Self::Confirm        => Self::InitialBalance,
         }
     }
 }
@@ -223,6 +226,8 @@ pub struct AddAccountForm {
     /// Space-separated currencies, e.g. "USD"
     pub currencies: String,
     pub date: String,
+    /// Optional opening balance amount (blank = no opening entry)
+    pub initial_balance: String,
     pub focused: AddAccountField,
     pub error: Option<String>,
 }
@@ -232,6 +237,7 @@ impl AddAccountForm {
         Self {
             type_idx: 0,
             sub_name: String::new(),
+            initial_balance: String::new(),
             currencies: default_currency.to_string(),
             date: Local::now().date_naive().format("%Y-%m-%d").to_string(),
             focused: AddAccountField::AccountType,
@@ -409,11 +415,68 @@ impl App {
             .map(|s| s.trim_matches(',').to_uppercase())
             .collect();
 
+        // Parse optional initial balance before any writes
+        let initial_balance: Option<(Decimal, String)> = {
+            let raw = form.initial_balance.trim();
+            if raw.is_empty() {
+                None
+            } else {
+                let amount = Decimal::from_str(raw)
+                    .map_err(|_| anyhow::anyhow!("Invalid initial balance — enter a number, e.g. 1500.00"))?;
+                let currency = currencies
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| self.config.currency.clone());
+                Some((amount, currency))
+            }
+        };
+
         let path = self.config.resolved_beancount_file();
+
+        // Write the open directive for the new account
         append_account_open(&path, date, &account_name, &currencies)?;
+
+        // If an initial balance was given, also write an opening transaction
+        if let Some((amount, currency)) = &initial_balance {
+            const EQUITY_ACCT: &str = "Equity:OpeningBalances";
+
+            // Ensure Equity:OpeningBalances is open — add its open directive if missing
+            let already_open = self
+                .ledger
+                .accounts
+                .iter()
+                .any(|a| a.name == EQUITY_ACCT);
+            if !already_open {
+                append_account_open(&path, date, EQUITY_ACCT, &[currency.clone()])?;
+            }
+
+            let opening_txn = NewTransaction {
+                date,
+                flag: '*',
+                payee: None,
+                narration: format!("Opening balance for {}", account_name),
+                postings: vec![
+                    NewPosting {
+                        account: account_name.clone(),
+                        amount: Some(*amount),
+                        currency: Some(currency.clone()),
+                    },
+                    NewPosting {
+                        account: EQUITY_ACCT.to_string(),
+                        amount: None,
+                        currency: None,
+                    },
+                ],
+            };
+            append_transaction(&path, &opening_txn)?;
+        }
+
         self.reload_ledger()?;
 
-        let mut status_parts = vec![format!("Account '{}' added.", account_name)];
+        let mut status_parts = vec![match &initial_balance {
+            Some((amt, cur)) => format!("Account '{}' added with opening balance {} {}.", account_name, amt, cur),
+            None => format!("Account '{}' added.", account_name),
+        }];
 
         if git::is_git_repo(path.parent().unwrap_or(&path)) {
             let msg = format!("account: open {}", account_name);

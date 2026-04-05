@@ -131,6 +131,29 @@ fn render_form(f: &mut Frame, app: &App, area: Rect) {
     ]));
     lines.push(Line::from(""));
 
+    // ── Initial Balance ───────────────────────────────────────────────────────
+    let bal_focused = form.focused == AddAccountField::InitialBalance;
+    let cursor = if bal_focused { "█" } else { " " };
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  Opening bal: ",
+            if bal_focused {
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            },
+        ),
+        Span::styled(
+            format!("{}{}", form.initial_balance, cursor),
+            Style::default().fg(Color::White),
+        ),
+    ]));
+    lines.push(Line::from(Span::styled(
+        "               (optional — leave blank to skip)",
+        Style::default().fg(Color::DarkGray),
+    )));
+    lines.push(Line::from(""));
+
     // ── Confirm ───────────────────────────────────────────────────────────────
     let confirm_focused = form.focused == AddAccountField::Confirm;
     lines.push(Line::from(vec![Span::styled(
@@ -175,6 +198,15 @@ fn render_help(f: &mut Frame, _app: &App, area: Rect) {
         Line::from(Span::styled("  ← / →     Change account type", Style::default().fg(Color::White))),
         Line::from(Span::styled("  Enter     Confirm / Submit", Style::default().fg(Color::White))),
         Line::from(Span::styled("  Esc       Cancel", Style::default().fg(Color::White))),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Opening Balance",
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled("  Sets the account's starting", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("  value via a transaction from", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("  Equity:OpeningBalances.", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("  Leave blank to skip.", Style::default().fg(Color::DarkGray))),
         Line::from(""),
         Line::from(Span::styled(
             "  Account naming",
