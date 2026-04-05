@@ -10,10 +10,6 @@ pub struct Config {
     pub currency: String,
     /// Run bean-check after every write
     pub auto_bean_check: bool,
-    /// Spawn fava in background after committing transactions
-    pub launch_fava_after_entry: bool,
-    /// Port for fava
-    pub fava_port: u16,
 }
 
 impl Default for Config {
@@ -22,8 +18,6 @@ impl Default for Config {
             beancount_file: "~/finances/main.beancount".to_string(),
             currency: "USD".to_string(),
             auto_bean_check: true,
-            launch_fava_after_entry: false,
-            fava_port: 5000,
         }
     }
 }

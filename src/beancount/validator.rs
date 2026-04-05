@@ -1,4 +1,3 @@
-use anyhow::Result;
 use std::path::Path;
 use std::process::Command;
 
@@ -29,14 +28,4 @@ pub fn bean_check(path: &Path) -> CheckResult {
             }
         }
     }
-}
-
-/// Spawn fava as a background process. Returns the port it was launched on.
-pub fn launch_fava(path: &Path, port: u16) -> Result<std::process::Child> {
-    let child = Command::new("fava")
-        .arg("--port")
-        .arg(port.to_string())
-        .arg(path)
-        .spawn()?;
-    Ok(child)
 }

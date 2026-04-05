@@ -9,7 +9,6 @@ A terminal UI for plain text accounting with [beancount](https://beancount.githu
 - **Add transactions** — guided double-entry form with account autocomplete
 - **Reports** — monthly income vs expenses bar chart + summary table
 - **bean-check integration** — validates your file after every write
-- **fava integration** — optionally launches fava in the background after entry
 
 ## Quick Start
 
@@ -26,9 +25,7 @@ Point it at your beancount file:
 {
   "beancount_file": "~/finances/main.beancount",
   "currency": "USD",
-  "auto_bean_check": true,
-  "launch_fava_after_entry": false,
-  "fava_port": 5000
+  "auto_bean_check": true
 }
 ```
 
@@ -54,4 +51,3 @@ A demo file is provided at `examples/demo.beancount`.
 
 - Rust 1.75+
 - `bean-check` (optional, from `pip install beancount`) for validation
-- `fava` (optional, from `pip install fava`) for web UI integration
