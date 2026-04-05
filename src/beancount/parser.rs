@@ -60,7 +60,13 @@ impl Ledger {
 
     /// Group transactions by month, return sorted `(YYYY-MM, income, expenses)`.
     /// Only includes months that have at least one Income or Expenses posting.
-    pub fn monthly_summary(&self, currency: &str) -> Vec<(String, Decimal, Decimal)> {
+    /// When `filter` is `Some`, only postings whose account name is in the set
+    /// are counted; `None` means include all accounts.
+    pub fn monthly_summary(
+        &self,
+        currency: &str,
+        filter: Option<&std::collections::HashSet<String>>,
+    ) -> Vec<(String, Decimal, Decimal)> {
         let mut map: HashMap<String, (Decimal, Decimal)> = HashMap::new();
         for txn in &self.transactions {
             let key = txn.date.format("%Y-%m").to_string();
@@ -68,6 +74,11 @@ impl Ledger {
                 let cur = posting.currency.as_deref().unwrap_or("");
                 if cur != currency {
                     continue;
+                }
+                if let Some(ref f) = filter {
+                    if !f.contains(&posting.account) {
+                        continue;
+                    }
                 }
                 if let Some(amount) = posting.amount {
                     let acct = &posting.account;

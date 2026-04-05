@@ -1,6 +1,7 @@
 use crate::app::{
     AddAccountField, AddTxField, App, GitStatus, Modal, Screen, StartupGitChoice, ACCOUNT_TYPES,
 };
+use crossterm::event::KeyModifiers;
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 
@@ -47,6 +48,10 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
                 if let Err(e) = app.create_beancount_file() {
                     app.status_message = Some(format!("Error: {}", e));
                 }
+                return Ok(());
+            }
+            KeyCode::Char('c') if app.screen == Screen::Reports => {
+                app.open_modal(Modal::AccountFilter);
                 return Ok(());
             }
             KeyCode::Char('r') => {
@@ -118,6 +123,7 @@ fn handle_modal(app: &mut App, key: KeyEvent) -> Result<()> {
     match app.modal.clone() {
         Some(Modal::AddTransaction) => handle_add_tx(app, key),
         Some(Modal::AddAccount) => handle_add_account(app, key),
+        Some(Modal::AccountFilter) => handle_account_filter(app, key),
         None => Ok(()),
     }
 }
@@ -299,6 +305,65 @@ fn handle_add_account(app: &mut App, key: KeyEvent) -> Result<()> {
             AddAccountField::InitialBalance => form.initial_balance.push(c),
             _ => {}
         },
+        _ => {}
+    }
+    Ok(())
+}
+
+// ── Modal: Account Filter ─────────────────────────────────────────────────────
+
+fn handle_account_filter(app: &mut App, key: KeyEvent) -> Result<()> {
+    let len = app.account_filter.len();
+    if len == 0 {
+        if key.code == KeyCode::Esc || key.code == KeyCode::Enter {
+            app.close_modal();
+        }
+        return Ok(());
+    }
+
+    // Visible rows available (used for scroll clamping); approximate — renderer
+    // will enforce the exact scroll, but we keep state consistent here.
+    const VISIBLE: usize = 18;
+
+    match key.code {
+        KeyCode::Esc | KeyCode::Enter => {
+            app.close_modal();
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if app.account_filter_cursor + 1 < len {
+                app.account_filter_cursor += 1;
+                // Scroll down if cursor went below visible window
+                if app.account_filter_cursor >= app.account_filter_scroll + VISIBLE {
+                    app.account_filter_scroll = app.account_filter_cursor - VISIBLE + 1;
+                }
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.account_filter_cursor > 0 {
+                app.account_filter_cursor -= 1;
+                if app.account_filter_cursor < app.account_filter_scroll {
+                    app.account_filter_scroll = app.account_filter_cursor;
+                }
+            }
+        }
+        KeyCode::Char(' ') => {
+            // Toggle the currently highlighted account
+            if let Some(entry) = app.account_filter.get_mut(app.account_filter_cursor) {
+                entry.1 = !entry.1;
+            }
+        }
+        // 'a' = check all
+        KeyCode::Char('a') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+            for entry in app.account_filter.iter_mut() {
+                entry.1 = true;
+            }
+        }
+        // 'u' = uncheck all (u for "uncheck all" / "none")
+        KeyCode::Char('u') => {
+            for entry in app.account_filter.iter_mut() {
+                entry.1 = false;
+            }
+        }
         _ => {}
     }
     Ok(())
