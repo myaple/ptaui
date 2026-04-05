@@ -134,6 +134,7 @@ fn handle_modal(app: &mut App, key: KeyEvent) -> Result<()> {
         Some(Modal::AddAccount) => handle_add_account(app, key),
         Some(Modal::AccountFilter) => handle_account_filter(app, key),
         Some(Modal::CategoryTransactions) => handle_category_transactions(app, key),
+        Some(Modal::TxAccountFilter) => handle_tx_account_filter(app, key),
         None => Ok(()),
     }
 }
@@ -190,6 +191,9 @@ fn handle_transactions(app: &mut App, key: KeyEvent) {
             if !app.ledger.transactions.is_empty() {
                 app.open_edit_tx_modal();
             }
+        }
+        KeyCode::Char('f') => {
+            app.open_modal(Modal::TxAccountFilter);
         }
         _ => {}
     }
@@ -487,6 +491,59 @@ fn handle_account_filter(app: &mut App, key: KeyEvent) -> Result<()> {
         // 'u' = uncheck all (u for "uncheck all" / "none")
         KeyCode::Char('u') => {
             for entry in app.account_filter.iter_mut() {
+                entry.1 = false;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+// ── Modal: Tx Account Filter ──────────────────────────────────────────────────
+
+fn handle_tx_account_filter(app: &mut App, key: KeyEvent) -> Result<()> {
+    let len = app.tx_account_filter.len();
+    if len == 0 {
+        if key.code == KeyCode::Esc || key.code == KeyCode::Enter {
+            app.close_modal();
+        }
+        return Ok(());
+    }
+
+    const VISIBLE: usize = 18;
+
+    match key.code {
+        KeyCode::Esc | KeyCode::Enter => {
+            app.close_modal();
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if app.tx_account_filter_cursor + 1 < len {
+                app.tx_account_filter_cursor += 1;
+                if app.tx_account_filter_cursor >= app.tx_account_filter_scroll + VISIBLE {
+                    app.tx_account_filter_scroll = app.tx_account_filter_cursor - VISIBLE + 1;
+                }
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.tx_account_filter_cursor > 0 {
+                app.tx_account_filter_cursor -= 1;
+                if app.tx_account_filter_cursor < app.tx_account_filter_scroll {
+                    app.tx_account_filter_scroll = app.tx_account_filter_cursor;
+                }
+            }
+        }
+        KeyCode::Char(' ') => {
+            if let Some(entry) = app.tx_account_filter.get_mut(app.tx_account_filter_cursor) {
+                entry.1 = !entry.1;
+            }
+        }
+        KeyCode::Char('a') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+            for entry in app.tx_account_filter.iter_mut() {
+                entry.1 = true;
+            }
+        }
+        KeyCode::Char('u') => {
+            for entry in app.tx_account_filter.iter_mut() {
                 entry.1 = false;
             }
         }
