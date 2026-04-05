@@ -281,17 +281,19 @@ fn handle_add_account(app: &mut App, key: KeyEvent) -> Result<()> {
         }
         KeyCode::Backspace => {
             match form.focused {
-                AddAccountField::SubName => { form.sub_name.pop(); }
-                AddAccountField::Currencies => { form.currencies.pop(); }
-                AddAccountField::Date => { form.date.pop(); }
+                AddAccountField::SubName        => { form.sub_name.pop(); }
+                AddAccountField::Currencies     => { form.currencies.pop(); }
+                AddAccountField::Date           => { form.date.pop(); }
+                AddAccountField::InitialBalance => { form.initial_balance.pop(); }
                 _ => {}
             }
         }
         KeyCode::Char(c) => {
             match form.focused {
-                AddAccountField::SubName => form.sub_name.push(c),
-                AddAccountField::Currencies => form.currencies.push(c),
-                AddAccountField::Date => form.date.push(c),
+                AddAccountField::SubName        => form.sub_name.push(c),
+                AddAccountField::Currencies     => form.currencies.push(c),
+                AddAccountField::Date           => form.date.push(c),
+                AddAccountField::InitialBalance => form.initial_balance.push(c),
                 _ => {}
             }
         }
