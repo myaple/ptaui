@@ -1,0 +1,86 @@
+; Demo beancount file for ptaui
+; Point to this file in ~/.config/ptaui/config.json
+
+option "title" "Personal Finances"
+option "operating_currency" "USD"
+
+; Account declarations
+2024-01-01 open Assets:Checking USD
+2024-01-01 open Assets:Savings USD
+2024-01-01 open Assets:Cash USD
+2024-01-01 open Liabilities:CreditCard USD
+2024-01-01 open Income:Salary USD
+2024-01-01 open Income:Freelance USD
+2024-01-01 open Expenses:Food:Groceries USD
+2024-01-01 open Expenses:Food:Restaurants USD
+2024-01-01 open Expenses:Housing:Rent USD
+2024-01-01 open Expenses:Transport USD
+2024-01-01 open Expenses:Entertainment USD
+2024-01-01 open Expenses:Healthcare USD
+2024-01-01 open Equity:OpeningBalances USD
+
+; Opening balances
+2024-01-01 * "Opening balances"
+  Assets:Checking           5000.00 USD
+  Assets:Savings           12000.00 USD
+  Assets:Cash                200.00 USD
+  Equity:OpeningBalances  -17200.00 USD
+
+; January
+2024-01-15 * "Employer" "Salary"
+  Income:Salary            -4500.00 USD
+  Assets:Checking           4500.00 USD
+
+2024-01-16 * "Whole Foods" "Groceries"
+  Expenses:Food:Groceries    120.50 USD
+  Assets:Checking           -120.50 USD
+
+2024-01-17 * "Landlord" "January rent"
+  Expenses:Housing:Rent     1800.00 USD
+  Assets:Checking          -1800.00 USD
+
+2024-01-20 * "Uber" "Ride to airport"
+  Expenses:Transport          32.00 USD
+  Liabilities:CreditCard     -32.00 USD
+
+2024-01-25 * "Netflix" "Monthly subscription"
+  Expenses:Entertainment      15.99 USD
+  Liabilities:CreditCard     -15.99 USD
+
+; February
+2024-02-15 * "Employer" "Salary"
+  Income:Salary            -4500.00 USD
+  Assets:Checking           4500.00 USD
+
+2024-02-01 * "Trader Joe's" "Groceries"
+  Expenses:Food:Groceries     95.20 USD
+  Assets:Checking            -95.20 USD
+
+2024-02-14 * "Restaurant" "Valentine's dinner"
+  Expenses:Food:Restaurants  180.00 USD
+  Liabilities:CreditCard    -180.00 USD
+
+2024-02-17 * "Landlord" "February rent"
+  Expenses:Housing:Rent     1800.00 USD
+  Assets:Checking          -1800.00 USD
+
+2024-02-20 * "Freelance Client" "Web design project"
+  Income:Freelance           -800.00 USD
+  Assets:Checking             800.00 USD
+
+; March
+2024-03-15 * "Employer" "Salary"
+  Income:Salary            -4500.00 USD
+  Assets:Checking           4500.00 USD
+
+2024-03-05 * "Costco" "Monthly groceries"
+  Expenses:Food:Groceries    210.00 USD
+  Assets:Checking           -210.00 USD
+
+2024-03-17 * "Landlord" "March rent"
+  Expenses:Housing:Rent     1800.00 USD
+  Assets:Checking          -1800.00 USD
+
+2024-03-22 * "Doctor" "Annual checkup"
+  Expenses:Healthcare        150.00 USD
+  Assets:Checking           -150.00 USD
