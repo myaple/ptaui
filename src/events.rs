@@ -194,6 +194,8 @@ fn handle_add_tx(app: &mut App, key: KeyEvent) -> Result<()> {
         None => return Ok(()),
     };
 
+    let was_on_payee = form.focused == AddTxField::Payee;
+
     match key.code {
         KeyCode::Esc => {
             app.close_modal();
@@ -262,6 +264,18 @@ fn handle_add_tx(app: &mut App, key: KeyEvent) -> Result<()> {
         }
         _ => {}
     }
+
+    // When leaving the Payee field, auto-fill category/account from the most
+    // recent transaction with that payee (only if those fields are empty).
+    let now_on_payee = app
+        .add_tx_form
+        .as_ref()
+        .map(|f| f.focused == AddTxField::Payee)
+        .unwrap_or(true);
+    if was_on_payee && !now_on_payee {
+        app.apply_payee_defaults();
+    }
+
     Ok(())
 }
 

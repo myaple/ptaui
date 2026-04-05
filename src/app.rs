@@ -511,6 +511,69 @@ impl App {
         self.ledger.accounts.iter().map(|a| a.name.clone()).collect()
     }
 
+    /// If the add_tx_form payee matches a known payee, auto-fill the category
+    /// and account fields from that payee's most recent transaction, but only
+    /// when those fields are currently empty.
+    pub fn apply_payee_defaults(&mut self) {
+        let payee = match self.add_tx_form.as_ref() {
+            Some(f) if !f.payee.trim().is_empty() => f.payee.trim().to_string(),
+            _ => return,
+        };
+
+        // Skip if both fields are already filled in.
+        let (cat_empty, acct_empty) = match self.add_tx_form.as_ref() {
+            Some(f) => (f.category.is_empty(), f.account.is_empty()),
+            None => return,
+        };
+        if !cat_empty && !acct_empty {
+            return;
+        }
+
+        // Find the most recent transaction with this payee (case-insensitive).
+        let maybe_defaults = self
+            .ledger
+            .transactions
+            .iter()
+            .filter(|t| {
+                t.payee
+                    .as_deref()
+                    .map(|p| p.eq_ignore_ascii_case(&payee))
+                    .unwrap_or(false)
+            })
+            .max_by_key(|t| t.date)
+            .and_then(|txn| {
+                let category = txn
+                    .postings
+                    .iter()
+                    .find(|p| {
+                        p.account.starts_with("Expenses:") || p.account.starts_with("Income:")
+                    })
+                    .map(|p| p.account.clone());
+                let account = txn
+                    .postings
+                    .iter()
+                    .find(|p| {
+                        p.account.starts_with("Assets:") || p.account.starts_with("Liabilities:")
+                    })
+                    .map(|p| p.account.clone());
+                match (category, account) {
+                    (Some(c), Some(a)) => Some((c, a)),
+                    _ => None,
+                }
+            });
+
+        if let Some((category, account)) = maybe_defaults {
+            if let Some(form) = self.add_tx_form.as_mut() {
+                if form.category.is_empty() {
+                    form.category = category;
+                }
+                if form.account.is_empty() {
+                    form.account = account;
+                }
+            }
+        }
+    }
+
     /// Unique, sorted payees extracted from all transactions in the ledger.
     pub fn known_payees(&self) -> Vec<String> {
         let mut seen = std::collections::HashSet::new();
