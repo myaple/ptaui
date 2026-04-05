@@ -520,12 +520,12 @@ impl App {
             _ => return,
         };
 
-        // Skip if both fields are already filled in.
-        let (cat_empty, acct_empty) = match self.add_tx_form.as_ref() {
-            Some(f) => (f.category.is_empty(), f.account.is_empty()),
+        // Skip if all three fields are already filled in.
+        let (cat_empty, acct_empty, narr_empty) = match self.add_tx_form.as_ref() {
+            Some(f) => (f.category.is_empty(), f.account.is_empty(), f.narration.is_empty()),
             None => return,
         };
-        if !cat_empty && !acct_empty {
+        if !cat_empty && !acct_empty && !narr_empty {
             return;
         }
 
@@ -541,7 +541,7 @@ impl App {
                     .unwrap_or(false)
             })
             .max_by_key(|t| t.date)
-            .and_then(|txn| {
+            .map(|txn| {
                 let category = txn
                     .postings
                     .iter()
@@ -556,19 +556,23 @@ impl App {
                         p.account.starts_with("Assets:") || p.account.starts_with("Liabilities:")
                     })
                     .map(|p| p.account.clone());
-                match (category, account) {
-                    (Some(c), Some(a)) => Some((c, a)),
-                    _ => None,
-                }
+                (txn.narration.clone(), category, account)
             });
 
-        if let Some((category, account)) = maybe_defaults {
+        if let Some((narration, category, account)) = maybe_defaults {
             if let Some(form) = self.add_tx_form.as_mut() {
+                if form.narration.is_empty() {
+                    form.narration = narration;
+                }
                 if form.category.is_empty() {
-                    form.category = category;
+                    if let Some(c) = category {
+                        form.category = c;
+                    }
                 }
                 if form.account.is_empty() {
-                    form.account = account;
+                    if let Some(a) = account {
+                        form.account = a;
+                    }
                 }
             }
         }
