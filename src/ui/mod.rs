@@ -1,6 +1,7 @@
 pub mod add_tx;
 pub mod dashboard;
 pub mod reports;
+pub mod startup;
 pub mod transactions;
 
 use crate::app::{App, Screen};
@@ -12,8 +13,13 @@ use ratatui::{
 };
 
 pub fn render(f: &mut Frame, app: &App) {
-    let size = f.area();
+    // Startup screen takes the whole frame — no tab bar
+    if app.screen == Screen::Startup {
+        startup::render(f, app);
+        return;
+    }
 
+    let size = f.area();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -30,6 +36,7 @@ pub fn render(f: &mut Frame, app: &App) {
         Screen::Transactions => transactions::render(f, app, chunks[1]),
         Screen::AddTransaction => add_tx::render(f, app, chunks[1]),
         Screen::Reports => reports::render(f, app, chunks[1]),
+        Screen::Startup => unreachable!(),
     }
 
     render_status(f, app, chunks[2]);
@@ -42,9 +49,14 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
         Screen::Transactions => 1,
         Screen::AddTransaction => 2,
         Screen::Reports => 3,
+        Screen::Startup => 0,
     };
     let tabs = Tabs::new(titles)
-        .block(Block::default().borders(Borders::ALL).title(" ptaui — Plain Text Accounting "))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" ptaui — Plain Text Accounting "),
+        )
         .select(selected)
         .style(Style::default().fg(Color::White))
         .highlight_style(
@@ -63,10 +75,7 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
         s.clone()
     } else {
         let file = app.config.resolved_beancount_file();
-        format!(
-            " {} | q: quit  1-4: screens  ?: help",
-            file.display()
-        )
+        format!(" {} | q: quit  1-4: screens  r: reload", file.display())
     };
 
     let style = if !app.check_errors.is_empty() {
