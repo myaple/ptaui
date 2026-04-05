@@ -2,10 +2,11 @@ mod app;
 mod beancount;
 mod config;
 mod events;
+mod git;
 mod ui;
 
 use anyhow::{Context, Result};
-use app::App;
+use app::{App, GitStatus, StartupGitChoice, StartupState};
 use beancount::parser;
 use config::Config;
 use crossterm::{
@@ -18,8 +19,9 @@ use std::io;
 use std::time::Duration;
 
 fn main() -> Result<()> {
-    // Load config (creates default if missing)
-    let config = Config::load().context("Loading config")?;
+    // Load config — returns (config, freshly_created)
+    let (config, config_just_created) = Config::load().context("Loading config")?;
+    let config_path = Config::config_path()?;
 
     // Load ledger (ok if file doesn't exist yet)
     let ledger = {
@@ -33,7 +35,31 @@ fn main() -> Result<()> {
         }
     };
 
-    let mut app = App::new(config, ledger);
+    // Determine git status of the beancount file's directory
+    let git_status = {
+        let path = config.resolved_beancount_file();
+        if let Some(dir) = path.parent() {
+            if !dir.exists() || !path.exists() {
+                GitStatus::NoFile
+            } else if git::is_git_repo(dir) {
+                GitStatus::Controlled
+            } else {
+                GitStatus::Uncontrolled { dir: dir.to_path_buf() }
+            }
+        } else {
+            GitStatus::NoFile
+        }
+    };
+
+    let startup = StartupState {
+        config_just_created,
+        config_path,
+        git_status,
+        git_choice: StartupGitChoice::InitRepo,
+        git_init_result: None,
+    };
+
+    let mut app = App::new(config, ledger, startup);
 
     // Set up terminal
     enable_raw_mode()?;

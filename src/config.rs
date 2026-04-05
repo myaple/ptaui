@@ -34,18 +34,20 @@ impl Config {
         Ok(base.join("ptaui").join("config.json"))
     }
 
-    pub fn load() -> Result<Self> {
+    /// Load config. Returns `(config, freshly_created)`.
+    /// If no config file exists a default one is written to disk and `true` is returned.
+    pub fn load() -> Result<(Self, bool)> {
         let path = Self::config_path()?;
         if !path.exists() {
             let cfg = Config::default();
             cfg.save()?;
-            return Ok(cfg);
+            return Ok((cfg, true));
         }
         let data = std::fs::read_to_string(&path)
             .with_context(|| format!("Reading config from {}", path.display()))?;
         let cfg: Config = serde_json::from_str(&data)
             .with_context(|| format!("Parsing config from {}", path.display()))?;
-        Ok(cfg)
+        Ok((cfg, false))
     }
 
     pub fn save(&self) -> Result<()> {

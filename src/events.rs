@@ -1,10 +1,15 @@
-use crate::app::{AddTxField, App, Screen};
+use crate::app::{AddTxField, App, GitStatus, Screen, StartupGitChoice};
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 
 pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
     if let Event::Key(key) = event {
-        // Global keys
+        // Startup screen has its own handler — nothing else fires while it's up
+        if app.screen == Screen::Startup {
+            return handle_startup(app, key);
+        }
+
+        // Global keys (not available during add transaction)
         match key.code {
             KeyCode::Char('q') if app.screen != Screen::AddTransaction => {
                 app.running = false;
@@ -39,7 +44,63 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
             Screen::Transactions => handle_transactions(app, key),
             Screen::AddTransaction => handle_add_tx(app, key)?,
             Screen::Reports => {}
+            Screen::Startup => unreachable!(),
         }
+    }
+    Ok(())
+}
+
+fn handle_startup(app: &mut App, key: KeyEvent) -> Result<()> {
+    let is_uncontrolled =
+        matches!(app.startup.git_status, GitStatus::Uncontrolled { .. });
+    let already_acted = app.startup.git_init_result.is_some();
+
+    match key.code {
+        // Dismiss / continue
+        KeyCode::Esc => {
+            app.navigate_to(Screen::Dashboard);
+        }
+        // Toggle Y/N with Tab, arrow keys, or h/l
+        KeyCode::Tab
+        | KeyCode::Left
+        | KeyCode::Right
+        | KeyCode::Char('h')
+        | KeyCode::Char('l') => {
+            if is_uncontrolled && !already_acted {
+                app.startup.git_choice = match app.startup.git_choice {
+                    StartupGitChoice::InitRepo => StartupGitChoice::Skip,
+                    StartupGitChoice::Skip => StartupGitChoice::InitRepo,
+                };
+            }
+        }
+        // Shortcut: y / n
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            if is_uncontrolled && !already_acted {
+                app.startup.git_choice = StartupGitChoice::InitRepo;
+                app.startup_init_git();
+            }
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') => {
+            if is_uncontrolled && !already_acted {
+                app.startup.git_choice = StartupGitChoice::Skip;
+                app.navigate_to(Screen::Dashboard);
+            }
+        }
+        KeyCode::Enter => {
+            if is_uncontrolled && !already_acted {
+                match app.startup.git_choice {
+                    StartupGitChoice::InitRepo => app.startup_init_git(),
+                    StartupGitChoice::Skip => app.navigate_to(Screen::Dashboard),
+                }
+            } else {
+                // Config-only notice, or post-init — just proceed
+                app.navigate_to(Screen::Dashboard);
+            }
+        }
+        KeyCode::Char('q') => {
+            app.running = false;
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -88,7 +149,6 @@ fn handle_add_tx(app: &mut App, key: KeyEvent) -> Result<()> {
             return Ok(());
         }
         KeyCode::Tab => {
-            // On account fields, try autocomplete first if not already completed
             if matches!(form.focused, AddTxField::FromAccount | AddTxField::ToAccount) {
                 let suggestions = form.suggestions_for_current();
                 if !suggestions.is_empty() {
