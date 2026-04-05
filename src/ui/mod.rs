@@ -1,6 +1,7 @@
 pub mod account_filter;
 pub mod add_account;
 pub mod add_tx;
+pub mod category_transactions;
 pub mod dashboard;
 pub mod reports;
 pub mod startup;
@@ -48,6 +49,7 @@ pub fn render(f: &mut Frame, app: &App) {
         Some(Modal::EditTransaction) => add_tx::render_edit_modal(f, app),
         Some(Modal::AddAccount) => add_account::render_modal(f, app),
         Some(Modal::AccountFilter) => account_filter::render_modal(f, app),
+        Some(Modal::CategoryTransactions) => category_transactions::render_modal(f, app),
         None => {}
     }
 }

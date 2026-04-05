@@ -1,5 +1,6 @@
 use crate::app::{
-    AddAccountField, AddTxField, App, GitStatus, Modal, Screen, StartupGitChoice, ACCOUNT_TYPES,
+    AddAccountField, AddTxField, App, GitStatus, Modal, ReportsView, Screen,
+    StartupGitChoice, ACCOUNT_TYPES,
 };
 use crossterm::event::KeyModifiers;
 use anyhow::Result;
@@ -54,6 +55,13 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
                 app.open_modal(Modal::AccountFilter);
                 return Ok(());
             }
+            KeyCode::Tab if app.screen == Screen::Reports => {
+                app.reports_view = match app.reports_view {
+                    ReportsView::Monthly => ReportsView::Breakdown,
+                    ReportsView::Breakdown => ReportsView::Monthly,
+                };
+                return Ok(());
+            }
             KeyCode::Char('r') => {
                 app.reload_ledger()?;
                 app.status_message = Some("Ledger reloaded.".to_string());
@@ -66,7 +74,7 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
         match app.screen {
             Screen::Dashboard => handle_dashboard(app, key),
             Screen::Transactions => handle_transactions(app, key),
-            Screen::Reports => {}
+            Screen::Reports => handle_reports(app, key),
             Screen::Startup => unreachable!(),
         }
     }
@@ -125,6 +133,7 @@ fn handle_modal(app: &mut App, key: KeyEvent) -> Result<()> {
         Some(Modal::EditTransaction) => handle_edit_tx(app, key),
         Some(Modal::AddAccount) => handle_add_account(app, key),
         Some(Modal::AccountFilter) => handle_account_filter(app, key),
+        Some(Modal::CategoryTransactions) => handle_category_transactions(app, key),
         None => Ok(()),
     }
 }
@@ -479,6 +488,126 @@ fn handle_account_filter(app: &mut App, key: KeyEvent) -> Result<()> {
         KeyCode::Char('u') => {
             for entry in app.account_filter.iter_mut() {
                 entry.1 = false;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+// ── Screen: Reports ───────────────────────────────────────────────────────────
+
+fn handle_reports(app: &mut App, key: KeyEvent) {
+    if app.reports_view != ReportsView::Breakdown {
+        return;
+    }
+
+    const VISIBLE: usize = 20;
+
+    let filter = app.active_account_filter();
+    let period = app.breakdown_period.clone();
+    let breakdown_len = app
+        .ledger
+        .category_breakdown(&app.config.currency, period.start(), period.end(), filter.as_ref())
+        .len();
+
+    match key.code {
+        // Period navigation
+        KeyCode::Left | KeyCode::Char('h') => {
+            app.breakdown_period = app.breakdown_period.prev();
+            app.breakdown_cursor = 0;
+            app.breakdown_scroll = 0;
+        }
+        KeyCode::Right | KeyCode::Char('l') => {
+            app.breakdown_period = app.breakdown_period.next();
+            app.breakdown_cursor = 0;
+            app.breakdown_scroll = 0;
+        }
+        // Switch period mode
+        KeyCode::Char('m') => {
+            app.breakdown_period = app.breakdown_period.as_month();
+            app.breakdown_cursor = 0;
+            app.breakdown_scroll = 0;
+        }
+        KeyCode::Char('y') => {
+            app.breakdown_period = app.breakdown_period.as_year();
+            app.breakdown_cursor = 0;
+            app.breakdown_scroll = 0;
+        }
+        // Category list navigation
+        KeyCode::Down | KeyCode::Char('j') => {
+            if breakdown_len > 0 && app.breakdown_cursor + 1 < breakdown_len {
+                app.breakdown_cursor += 1;
+                if app.breakdown_cursor >= app.breakdown_scroll + VISIBLE {
+                    app.breakdown_scroll = app.breakdown_cursor - VISIBLE + 1;
+                }
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.breakdown_cursor > 0 {
+                app.breakdown_cursor -= 1;
+                if app.breakdown_cursor < app.breakdown_scroll {
+                    app.breakdown_scroll = app.breakdown_cursor;
+                }
+            }
+        }
+        // Open category transactions modal
+        KeyCode::Enter => {
+            if breakdown_len > 0 {
+                let filter = app.active_account_filter();
+                let period = app.breakdown_period.clone();
+                let bd = app.ledger.category_breakdown(
+                    &app.config.currency,
+                    period.start(),
+                    period.end(),
+                    filter.as_ref(),
+                );
+                if let Some((category, _)) = bd.get(app.breakdown_cursor) {
+                    app.category_tx_category = category.clone();
+                    app.category_tx_cursor = 0;
+                    app.category_tx_scroll = 0;
+                    app.open_modal(Modal::CategoryTransactions);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+// ── Modal: Category Transactions ─────────────────────────────────────────────
+
+fn handle_category_transactions(app: &mut App, key: KeyEvent) -> Result<()> {
+    const VISIBLE: usize = 18;
+
+    let period = app.breakdown_period.clone();
+    let total = app
+        .ledger
+        .transactions_for_category(
+            &app.config.currency,
+            period.start(),
+            period.end(),
+            &app.category_tx_category.clone(),
+        )
+        .len();
+
+    match key.code {
+        KeyCode::Esc | KeyCode::Enter => {
+            app.close_modal();
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if total > 0 && app.category_tx_cursor + 1 < total {
+                app.category_tx_cursor += 1;
+                if app.category_tx_cursor >= app.category_tx_scroll + VISIBLE {
+                    app.category_tx_scroll = app.category_tx_cursor - VISIBLE + 1;
+                }
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.category_tx_cursor > 0 {
+                app.category_tx_cursor -= 1;
+                if app.category_tx_cursor < app.category_tx_scroll {
+                    app.category_tx_scroll = app.category_tx_cursor;
+                }
             }
         }
         _ => {}
