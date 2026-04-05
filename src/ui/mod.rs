@@ -5,7 +5,7 @@ pub mod reports;
 pub mod startup;
 pub mod transactions;
 
-use crate::app::{App, Screen};
+use crate::app::{App, Modal, Screen};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -14,7 +14,7 @@ use ratatui::{
 };
 
 pub fn render(f: &mut Frame, app: &App) {
-    // Startup screen takes the whole frame — no tab bar
+    // Startup is full-screen — nothing else renders
     if app.screen == Screen::Startup {
         startup::render(f, app);
         return;
@@ -35,21 +35,25 @@ pub fn render(f: &mut Frame, app: &App) {
     match app.screen {
         Screen::Dashboard => dashboard::render(f, app, chunks[1]),
         Screen::Transactions => transactions::render(f, app, chunks[1]),
-        Screen::AddTransaction => add_tx::render(f, app, chunks[1]),
-        Screen::AddAccount => add_account::render(f, app, chunks[1]),
         Screen::Reports => reports::render(f, app, chunks[1]),
         Screen::Startup => unreachable!(),
     }
 
     render_status(f, app, chunks[2]);
+
+    // Modal overlays — rendered after the background so they appear on top
+    match &app.modal {
+        Some(Modal::AddTransaction) => add_tx::render_modal(f, app),
+        Some(Modal::AddAccount) => add_account::render_modal(f, app),
+        None => {}
+    }
 }
 
 fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
-    let titles = vec!["[1] Accounts", "[2] Transactions", "[3] Add", "[4] Reports"];
+    let titles = vec!["[1] Accounts", "[2] Transactions", "[3] Add Txn", "[4] Reports"];
     let selected = match app.screen {
         Screen::Dashboard => 0,
         Screen::Transactions => 1,
-        Screen::AddTransaction | Screen::AddAccount => 2,
         Screen::Reports => 3,
         Screen::Startup => 0,
     };
@@ -77,7 +81,10 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
         s.clone()
     } else {
         let file = app.config.resolved_beancount_file();
-        format!(" {} | q: quit  1-4: screens  r: reload", file.display())
+        format!(
+            " {} | q quit  1-4 screens  3/a add  r reload",
+            file.display()
+        )
     };
 
     let style = if !app.check_errors.is_empty() {
@@ -92,4 +99,25 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
         .block(Block::default().borders(Borders::ALL))
         .style(style);
     f.render_widget(para, area);
+}
+
+/// Return a centered Rect, `width` × `height`, within `area`.
+pub fn centered_modal(width: u16, height: u16, area: Rect) -> Rect {
+    Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width: width.min(area.width),
+        height: height.min(area.height),
+    }
+}
+
+/// Render a semi-transparent dimming overlay behind a modal.
+pub fn render_dim(f: &mut Frame) {
+    let area = f.area();
+    // Ratatui doesn't have true transparency, but rendering a dark block
+    // over the whole screen gives a clear modal separation.
+    let dim = Block::default().style(Style::default().bg(Color::Black));
+    f.render_widget(dim, area);
+    // Then clear just the modal region so content shows through — callers
+    // do this themselves after calling centered_modal.
 }

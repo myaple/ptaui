@@ -1,16 +1,22 @@
 use crate::app::{AddAccountField, App, ACCOUNT_TYPES};
+use crate::ui::{centered_modal, render_dim};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
-pub fn render(f: &mut Frame, app: &App, area: Rect) {
+pub fn render_modal(f: &mut Frame, app: &App) {
     if app.add_account_form.is_none() {
         return;
     }
+
+    render_dim(f);
+
+    let area = centered_modal(90, 28, f.area());
+    f.render_widget(Clear, area);
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)

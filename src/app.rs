@@ -17,9 +17,15 @@ pub enum Screen {
     Startup,
     Dashboard,
     Transactions,
+    Reports,
+}
+
+/// Overlay modals rendered on top of the active screen.
+/// While a modal is open ALL key input is captured by the modal.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Modal {
     AddTransaction,
     AddAccount,
-    Reports,
 }
 
 // ── Startup state ─────────────────────────────────────────────────────────────
@@ -297,6 +303,8 @@ pub struct App {
     /// True when the beancount file was found and successfully read.
     pub file_found: bool,
     pub screen: Screen,
+    /// Currently open modal overlay (if any). Captures all key input.
+    pub modal: Option<Modal>,
     pub startup: StartupState,
     pub tx_scroll: usize,
     pub dashboard_scroll: usize,
@@ -319,6 +327,7 @@ impl App {
             ledger,
             file_found,
             screen: initial_screen,
+            modal: None,
             startup,
             tx_scroll: 0,
             dashboard_scroll: 0,
@@ -415,20 +424,32 @@ impl App {
     }
 
     pub fn navigate_to(&mut self, screen: Screen) {
-        match screen {
-            Screen::AddTransaction => {
+        self.screen = screen;
+        self.status_message = None;
+        self.check_errors.clear();
+    }
+
+    /// Open a modal overlay. Captures all key input until closed.
+    pub fn open_modal(&mut self, modal: Modal) {
+        match modal {
+            Modal::AddTransaction => {
                 let accounts = self.account_names();
                 let payees = self.known_payees();
                 self.add_tx_form = Some(AddTxForm::new(&self.config.currency, &accounts, &payees));
             }
-            Screen::AddAccount => {
+            Modal::AddAccount => {
                 self.add_account_form = Some(AddAccountForm::new(&self.config.currency));
             }
-            _ => {}
         }
-        self.screen = screen;
-        self.status_message = None;
-        self.check_errors.clear();
+        self.modal = Some(modal);
+        // Don't clear status_message — it stays visible in the background
+    }
+
+    /// Close the active modal and discard its form state.
+    pub fn close_modal(&mut self) {
+        self.modal = None;
+        self.add_tx_form = None;
+        self.add_account_form = None;
     }
 
     /// Commit the current add_account_form to the beancount file.
