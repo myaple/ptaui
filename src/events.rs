@@ -37,6 +37,13 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
                 app.navigate_to(Screen::AddAccount);
                 return Ok(());
             }
+            // 'c' creates the beancount file when it doesn't exist yet
+            KeyCode::Char('c') if app.screen == Screen::Dashboard && !app.file_found => {
+                if let Err(e) = app.create_beancount_file() {
+                    app.status_message = Some(format!("Error: {}", e));
+                }
+                return Ok(());
+            }
             KeyCode::Char('r') if !in_form => {
                 app.reload_ledger()?;
                 app.status_message = Some("Ledger reloaded.".to_string());

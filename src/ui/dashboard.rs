@@ -45,7 +45,12 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
-                    "  Edit ~/.config/ptaui/config.json to set the correct path,",
+                    "  Press c to create this file with git version control.",
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  Or edit ~/.config/ptaui/config.json to point to an existing file,",
                     Style::default().fg(Color::DarkGray),
                 )),
                 Line::from(Span::styled(
