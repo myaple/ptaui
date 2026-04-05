@@ -6,6 +6,7 @@ pub mod dashboard;
 pub mod reports;
 pub mod startup;
 pub mod transactions;
+pub mod tx_account_filter;
 
 use crate::app::{App, Modal, Screen};
 use ratatui::{
@@ -50,6 +51,7 @@ pub fn render(f: &mut Frame, app: &App) {
         Some(Modal::AddAccount) => add_account::render_modal(f, app),
         Some(Modal::AccountFilter) => account_filter::render_modal(f, app),
         Some(Modal::CategoryTransactions) => category_transactions::render_modal(f, app),
+        Some(Modal::TxAccountFilter) => tx_account_filter::render_modal(f, app),
         None => {}
     }
 }
@@ -88,7 +90,7 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
         let file = app.config.resolved_beancount_file();
         if app.screen == Screen::Transactions && !app.ledger.transactions.is_empty() {
             format!(
-                " {} | q quit  1-3 screens  a add  e edit  r reload",
+                " {} | q quit  1-3 screens  a add  e edit  f filter  r reload",
                 file.display()
             )
         } else {

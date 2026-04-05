@@ -30,6 +30,8 @@ pub enum Modal {
     AccountFilter,
     /// Transactions for a specific category in the current breakdown period.
     CategoryTransactions,
+    /// Account filter for the transaction list view.
+    TxAccountFilter,
 }
 
 // ── Reports view state ────────────────────────────────────────────────────────
@@ -483,6 +485,12 @@ pub struct App {
     pub category_tx_scroll: usize,
     /// Selected transaction index inside the category transactions modal.
     pub category_tx_cursor: usize,
+    /// (account_name, is_checked) — filter for the transaction list view.
+    pub tx_account_filter: Vec<(String, bool)>,
+    /// Cursor position inside the tx account filter modal.
+    pub tx_account_filter_cursor: usize,
+    /// Scroll offset inside the tx account filter modal list.
+    pub tx_account_filter_scroll: usize,
 }
 
 impl App {
@@ -518,8 +526,12 @@ impl App {
             category_tx_category: String::new(),
             category_tx_scroll: 0,
             category_tx_cursor: 0,
+            tx_account_filter: Vec::new(),
+            tx_account_filter_cursor: 0,
+            tx_account_filter_scroll: 0,
         };
         app.rebuild_account_filter();
+        app.rebuild_tx_account_filter();
         app
     }
 
@@ -568,6 +580,48 @@ impl App {
         }
     }
 
+    /// Rebuild the tx account filter list from all accounts appearing in transactions.
+    /// Existing checked state is preserved for accounts that still exist.
+    pub fn rebuild_tx_account_filter(&mut self) {
+        use std::collections::{HashMap, HashSet};
+        let existing: HashMap<String, bool> = self.tx_account_filter.iter().cloned().collect();
+        let mut seen: HashSet<String> = HashSet::new();
+        for txn in &self.ledger.transactions {
+            for posting in &txn.postings {
+                seen.insert(posting.account.clone());
+            }
+        }
+        let mut sorted: Vec<String> = seen.into_iter().collect();
+        sorted.sort();
+        self.tx_account_filter = sorted
+            .into_iter()
+            .map(|a| {
+                let checked = existing.get(&a).copied().unwrap_or(true);
+                (a, checked)
+            })
+            .collect();
+        if self.tx_account_filter_cursor >= self.tx_account_filter.len() {
+            self.tx_account_filter_cursor = 0;
+            self.tx_account_filter_scroll = 0;
+        }
+    }
+
+    /// Returns `None` when all tx accounts are enabled (no filtering needed),
+    /// or `Some(set)` containing only the checked account names.
+    pub fn active_tx_account_filter(&self) -> Option<std::collections::HashSet<String>> {
+        if self.tx_account_filter.iter().all(|(_, c)| *c) {
+            None
+        } else {
+            Some(
+                self.tx_account_filter
+                    .iter()
+                    .filter(|(_, c)| *c)
+                    .map(|(a, _)| a.clone())
+                    .collect(),
+            )
+        }
+    }
+
     pub fn reload_ledger(&mut self) -> Result<()> {
         let path = self.config.resolved_beancount_file();
         if path.exists() {
@@ -578,6 +632,7 @@ impl App {
             self.file_found = false;
         }
         self.rebuild_account_filter();
+        self.rebuild_tx_account_filter();
         Ok(())
     }
 
@@ -740,6 +795,9 @@ impl App {
             Modal::AccountFilter => {
                 // Ensure the list is up-to-date; preserve existing selections.
                 self.rebuild_account_filter();
+            }
+            Modal::TxAccountFilter => {
+                self.rebuild_tx_account_filter();
             }
             Modal::EditTransaction => {
                 // Opened via open_edit_tx_modal() which sets up form state directly.

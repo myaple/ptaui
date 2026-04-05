@@ -17,8 +17,18 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
+    // Apply account filter: keep transactions that have at least one posting
+    // whose account is in the active filter set.
+    let filter = app.active_tx_account_filter();
+    let mut sorted: Vec<_> = txns
+        .iter()
+        .filter(|txn| match &filter {
+            None => true,
+            Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+        })
+        .collect();
+
     // Show in reverse chronological order
-    let mut sorted: Vec<_> = txns.iter().collect();
     sorted.sort_by(|a, b| b.date.cmp(&a.date));
 
     let visible_height = area.height.saturating_sub(2) as usize;
@@ -121,9 +131,17 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
+    let filter_hint = if filter.is_some() {
+        let checked = app.tx_account_filter.iter().filter(|(_, c)| *c).count();
+        let total = app.tx_account_filter.len();
+        format!("  f filter ({}/{})  ", checked, total)
+    } else {
+        "  f filter  ".to_string()
+    };
     let title = format!(
-        " Transactions ({}) — ↑↓ navigate  e edit ",
-        txns.len()
+        " Transactions ({}) — ↑↓ navigate  e edit{}",
+        sorted.len(),
+        filter_hint
     );
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title(title));
