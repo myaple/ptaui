@@ -112,11 +112,12 @@ pub struct AddTxForm {
     pub currency: String,
     pub focused: AddTxField,
     pub account_suggestions: Vec<String>,
+    pub payee_suggestions: Vec<String>,
     pub error: Option<String>,
 }
 
 impl AddTxForm {
-    pub fn new(currency: &str, accounts: &[String]) -> Self {
+    pub fn new(currency: &str, accounts: &[String], payees: &[String]) -> Self {
         Self {
             date: Local::now().date_naive().format("%Y-%m-%d").to_string(),
             payee: String::new(),
@@ -127,6 +128,7 @@ impl AddTxForm {
             currency: currency.to_string(),
             focused: AddTxField::Date,
             account_suggestions: accounts.to_vec(),
+            payee_suggestions: payees.to_vec(),
             error: None,
         }
     }
@@ -145,39 +147,71 @@ impl AddTxForm {
     }
 
     pub fn autocomplete(&mut self) {
+        let suggestions = self.suggestions_for_current();
+        if suggestions.is_empty() {
+            return;
+        }
         let prefix = match self.focused {
-            AddTxField::FromAccount => self.from_account.clone(),
-            AddTxField::ToAccount => self.to_account.clone(),
+            AddTxField::Payee       => &self.payee,
+            AddTxField::FromAccount => &self.from_account,
+            AddTxField::ToAccount   => &self.to_account,
             _ => return,
         };
-        if let Some(suggestion) = self
-            .account_suggestions
+        if let Some(suggestion) = suggestions
             .iter()
-            .find(|a| a.to_lowercase().contains(&prefix.to_lowercase()))
+            .find(|s| !s.eq_ignore_ascii_case(prefix))
+            .or_else(|| suggestions.first())
         {
+            let suggestion = suggestion.clone();
             match self.focused {
-                AddTxField::FromAccount => self.from_account = suggestion.clone(),
-                AddTxField::ToAccount => self.to_account = suggestion.clone(),
+                AddTxField::Payee       => self.payee = suggestion,
+                AddTxField::FromAccount => self.from_account = suggestion,
+                AddTxField::ToAccount   => self.to_account = suggestion,
                 _ => {}
             }
         }
     }
 
     pub fn suggestions_for_current(&self) -> Vec<String> {
-        let prefix = match self.focused {
-            AddTxField::FromAccount => &self.from_account,
-            AddTxField::ToAccount => &self.to_account,
-            _ => return vec![],
-        };
-        if prefix.is_empty() {
-            return vec![];
+        match self.focused {
+            AddTxField::Payee => {
+                let prefix = &self.payee;
+                if prefix.is_empty() {
+                    return vec![];
+                }
+                self.payee_suggestions
+                    .iter()
+                    .filter(|p| p.to_lowercase().contains(&prefix.to_lowercase()))
+                    .take(8)
+                    .cloned()
+                    .collect()
+            }
+            AddTxField::FromAccount => {
+                let prefix = &self.from_account;
+                if prefix.is_empty() {
+                    return vec![];
+                }
+                self.account_suggestions
+                    .iter()
+                    .filter(|a| a.to_lowercase().contains(&prefix.to_lowercase()))
+                    .take(8)
+                    .cloned()
+                    .collect()
+            }
+            AddTxField::ToAccount => {
+                let prefix = &self.to_account;
+                if prefix.is_empty() {
+                    return vec![];
+                }
+                self.account_suggestions
+                    .iter()
+                    .filter(|a| a.to_lowercase().contains(&prefix.to_lowercase()))
+                    .take(8)
+                    .cloned()
+                    .collect()
+            }
+            _ => vec![],
         }
-        self.account_suggestions
-            .iter()
-            .filter(|a| a.to_lowercase().contains(&prefix.to_lowercase()))
-            .take(5)
-            .cloned()
-            .collect()
     }
 }
 
@@ -366,11 +400,26 @@ impl App {
         self.ledger.accounts.iter().map(|a| a.name.clone()).collect()
     }
 
+    /// Unique, sorted payees extracted from all transactions in the ledger.
+    pub fn known_payees(&self) -> Vec<String> {
+        let mut seen = std::collections::HashSet::new();
+        let mut payees: Vec<String> = self
+            .ledger
+            .transactions
+            .iter()
+            .filter_map(|t| t.payee.clone())
+            .filter(|p| seen.insert(p.clone()))
+            .collect();
+        payees.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        payees
+    }
+
     pub fn navigate_to(&mut self, screen: Screen) {
         match screen {
             Screen::AddTransaction => {
                 let accounts = self.account_names();
-                self.add_tx_form = Some(AddTxForm::new(&self.config.currency, &accounts));
+                let payees = self.known_payees();
+                self.add_tx_form = Some(AddTxForm::new(&self.config.currency, &accounts, &payees));
             }
             Screen::AddAccount => {
                 self.add_account_form = Some(AddAccountForm::new(&self.config.currency));

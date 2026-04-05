@@ -163,12 +163,13 @@ fn handle_add_tx(app: &mut App, key: KeyEvent) -> Result<()> {
             return Ok(());
         }
         KeyCode::Tab => {
-            if matches!(form.focused, AddTxField::FromAccount | AddTxField::ToAccount) {
+            if matches!(form.focused, AddTxField::Payee | AddTxField::FromAccount | AddTxField::ToAccount) {
                 let suggestions = form.suggestions_for_current();
                 if !suggestions.is_empty() {
                     let current = match form.focused {
+                        AddTxField::Payee       => &form.payee,
                         AddTxField::FromAccount => &form.from_account,
-                        AddTxField::ToAccount => &form.to_account,
+                        AddTxField::ToAccount   => &form.to_account,
                         _ => unreachable!(),
                     };
                     if !suggestions.contains(current) {

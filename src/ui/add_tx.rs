@@ -111,8 +111,14 @@ fn render_help_and_suggestions(f: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
-    // Suggestions
+    // Suggestions — context-aware for Payee, FromAccount, ToAccount
     let suggestions = form.suggestions_for_current();
+    let (placeholder, pane_title) = match form.focused {
+        AddTxField::Payee => (" Start typing to see payees...", " Suggestions — Payee "),
+        AddTxField::FromAccount | AddTxField::ToAccount => (" Start typing to see accounts...", " Suggestions — Account "),
+        _ => (" (no suggestions for this field)", " Suggestions "),
+    };
+
     let suggestion_items: Vec<ListItem> = suggestions
         .iter()
         .map(|s| ListItem::new(Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Cyan)))))
@@ -120,7 +126,7 @@ fn render_help_and_suggestions(f: &mut Frame, app: &App, area: Rect) {
 
     let suggestions_widget = if suggestion_items.is_empty() {
         List::new(vec![ListItem::new(Line::from(Span::styled(
-            " Start typing to see accounts...",
+            placeholder,
             Style::default().fg(Color::DarkGray),
         )))])
     } else {
@@ -128,7 +134,7 @@ fn render_help_and_suggestions(f: &mut Frame, app: &App, area: Rect) {
     };
 
     f.render_widget(
-        suggestions_widget.block(Block::default().borders(Borders::ALL).title(" Account Suggestions ")),
+        suggestions_widget.block(Block::default().borders(Borders::ALL).title(pane_title)),
         chunks[0],
     );
 
@@ -141,8 +147,8 @@ fn render_help_and_suggestions(f: &mut Frame, app: &App, area: Rect) {
         Line::from(Span::styled("  Enter     Confirm/Submit", Style::default().fg(Color::White))),
         Line::from(Span::styled("  Esc       Cancel", Style::default().fg(Color::White))),
         Line::from(""),
-        Line::from(Span::styled("  Accounts", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled("  Tab       Autocomplete", Style::default().fg(Color::White))),
+        Line::from(Span::styled("  Autocomplete (Tab)", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("  Payee, From Acct, To Acct", Style::default().fg(Color::White))),
         Line::from(""),
         Line::from(Span::styled("  Double-entry", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
         Line::from(Span::styled("  From → debit source", Style::default().fg(Color::DarkGray))),
