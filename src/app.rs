@@ -74,8 +74,8 @@ pub enum AddTxField {
     Date,
     Payee,
     Narration,
-    FromAccount,
-    ToAccount,
+    Category,
+    Account,
     Amount,
     Currency,
     Confirm,
@@ -86,9 +86,9 @@ impl AddTxField {
         match self {
             Self::Date => Self::Payee,
             Self::Payee => Self::Narration,
-            Self::Narration => Self::FromAccount,
-            Self::FromAccount => Self::ToAccount,
-            Self::ToAccount => Self::Amount,
+            Self::Narration => Self::Category,
+            Self::Category => Self::Account,
+            Self::Account => Self::Amount,
             Self::Amount => Self::Currency,
             Self::Currency => Self::Confirm,
             Self::Confirm => Self::Date,
@@ -99,9 +99,9 @@ impl AddTxField {
             Self::Date => Self::Confirm,
             Self::Payee => Self::Date,
             Self::Narration => Self::Payee,
-            Self::FromAccount => Self::Narration,
-            Self::ToAccount => Self::FromAccount,
-            Self::Amount => Self::ToAccount,
+            Self::Category => Self::Narration,
+            Self::Account => Self::Category,
+            Self::Amount => Self::Account,
             Self::Currency => Self::Amount,
             Self::Confirm => Self::Currency,
         }
@@ -112,8 +112,10 @@ pub struct AddTxForm {
     pub date: String,
     pub payee: String,
     pub narration: String,
-    pub from_account: String,
-    pub to_account: String,
+    /// The expense/income category account (e.g. Expenses:Food:Restaurant).
+    pub category: String,
+    /// The payment account money comes out of (e.g. Liabilities:CreditCard:CapitalOne).
+    pub account: String,
     pub amount: String,
     pub currency: String,
     pub focused: AddTxField,
@@ -128,8 +130,8 @@ impl AddTxForm {
             date: Local::now().date_naive().format("%Y-%m-%d").to_string(),
             payee: String::new(),
             narration: String::new(),
-            from_account: String::new(),
-            to_account: String::new(),
+            category: String::new(),
+            account: String::new(),
             amount: String::new(),
             currency: currency.to_string(),
             focused: AddTxField::Date,
@@ -141,14 +143,14 @@ impl AddTxForm {
 
     pub fn current_field_mut(&mut self) -> &mut String {
         match self.focused {
-            AddTxField::Date => &mut self.date,
-            AddTxField::Payee => &mut self.payee,
+            AddTxField::Date      => &mut self.date,
+            AddTxField::Payee     => &mut self.payee,
             AddTxField::Narration => &mut self.narration,
-            AddTxField::FromAccount => &mut self.from_account,
-            AddTxField::ToAccount => &mut self.to_account,
-            AddTxField::Amount => &mut self.amount,
-            AddTxField::Currency => &mut self.currency,
-            AddTxField::Confirm => &mut self.narration, // dummy
+            AddTxField::Category  => &mut self.category,
+            AddTxField::Account   => &mut self.account,
+            AddTxField::Amount    => &mut self.amount,
+            AddTxField::Currency  => &mut self.currency,
+            AddTxField::Confirm   => &mut self.narration, // dummy
         }
     }
 
@@ -158,9 +160,9 @@ impl AddTxForm {
             return;
         }
         let prefix = match self.focused {
-            AddTxField::Payee       => &self.payee,
-            AddTxField::FromAccount => &self.from_account,
-            AddTxField::ToAccount   => &self.to_account,
+            AddTxField::Payee    => &self.payee,
+            AddTxField::Category => &self.category,
+            AddTxField::Account  => &self.account,
             _ => return,
         };
         if let Some(suggestion) = suggestions
@@ -170,9 +172,9 @@ impl AddTxForm {
         {
             let suggestion = suggestion.clone();
             match self.focused {
-                AddTxField::Payee       => self.payee = suggestion,
-                AddTxField::FromAccount => self.from_account = suggestion,
-                AddTxField::ToAccount   => self.to_account = suggestion,
+                AddTxField::Payee    => self.payee = suggestion,
+                AddTxField::Category => self.category = suggestion,
+                AddTxField::Account  => self.account = suggestion,
                 _ => {}
             }
         }
@@ -192,29 +194,63 @@ impl AddTxForm {
                     .cloned()
                     .collect()
             }
-            AddTxField::FromAccount => {
-                let prefix = &self.from_account;
+            // Category: show Expenses:* and Income:* accounts first, then others.
+            AddTxField::Category => {
+                let prefix = &self.category;
                 if prefix.is_empty() {
                     return vec![];
                 }
-                self.account_suggestions
+                let lower = prefix.to_lowercase();
+                let mut primary: Vec<String> = self.account_suggestions
                     .iter()
-                    .filter(|a| a.to_lowercase().contains(&prefix.to_lowercase()))
-                    .take(8)
+                    .filter(|a| {
+                        let al = a.to_lowercase();
+                        (al.starts_with("expenses:") || al.starts_with("income:"))
+                            && al.contains(&lower)
+                    })
                     .cloned()
-                    .collect()
+                    .collect();
+                let secondary: Vec<String> = self.account_suggestions
+                    .iter()
+                    .filter(|a| {
+                        let al = a.to_lowercase();
+                        !(al.starts_with("expenses:") || al.starts_with("income:"))
+                            && al.contains(&lower)
+                    })
+                    .cloned()
+                    .collect();
+                primary.extend(secondary);
+                primary.truncate(8);
+                primary
             }
-            AddTxField::ToAccount => {
-                let prefix = &self.to_account;
+            // Account: show Assets:* and Liabilities:* first, then others.
+            AddTxField::Account => {
+                let prefix = &self.account;
                 if prefix.is_empty() {
                     return vec![];
                 }
-                self.account_suggestions
+                let lower = prefix.to_lowercase();
+                let mut primary: Vec<String> = self.account_suggestions
                     .iter()
-                    .filter(|a| a.to_lowercase().contains(&prefix.to_lowercase()))
-                    .take(8)
+                    .filter(|a| {
+                        let al = a.to_lowercase();
+                        (al.starts_with("assets:") || al.starts_with("liabilities:"))
+                            && al.contains(&lower)
+                    })
                     .cloned()
-                    .collect()
+                    .collect();
+                let secondary: Vec<String> = self.account_suggestions
+                    .iter()
+                    .filter(|a| {
+                        let al = a.to_lowercase();
+                        !(al.starts_with("assets:") || al.starts_with("liabilities:"))
+                            && al.contains(&lower)
+                    })
+                    .cloned()
+                    .collect();
+                primary.extend(secondary);
+                primary.truncate(8);
+                primary
             }
             _ => vec![],
         }
@@ -586,11 +622,11 @@ impl App {
         if narration.is_empty() {
             anyhow::bail!("Narration cannot be empty");
         }
-        if form.from_account.trim().is_empty() {
-            anyhow::bail!("From account cannot be empty");
+        if form.category.trim().is_empty() {
+            anyhow::bail!("Category cannot be empty");
         }
-        if form.to_account.trim().is_empty() {
-            anyhow::bail!("To account cannot be empty");
+        if form.account.trim().is_empty() {
+            anyhow::bail!("Account cannot be empty");
         }
         let amount = Decimal::from_str(form.amount.trim())
             .map_err(|_| anyhow::anyhow!("Invalid amount"))?;
@@ -606,8 +642,10 @@ impl App {
 
         // Clone values we need after the mutable borrow ends
         let narration_clone = narration.clone();
-        let to_account = form.to_account.trim().to_string();
-        let from_account = form.from_account.trim().to_string();
+        // category (Expenses:*/Income:*) is debited (positive amount)
+        // account (Assets:*/Liabilities:*) is credited (negative amount)
+        let category = form.category.trim().to_string();
+        let account = form.account.trim().to_string();
 
         let new_txn = NewTransaction {
             date,
@@ -616,12 +654,12 @@ impl App {
             narration,
             postings: vec![
                 NewPosting {
-                    account: to_account,
+                    account: category,
                     amount: Some(amount),
                     currency: Some(currency.clone()),
                 },
                 NewPosting {
-                    account: from_account,
+                    account,
                     amount: Some(-amount),
                     currency: Some(currency),
                 },

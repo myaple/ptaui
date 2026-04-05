@@ -172,14 +172,14 @@ fn handle_add_tx(app: &mut App, key: KeyEvent) -> Result<()> {
         KeyCode::Tab => {
             if matches!(
                 form.focused,
-                AddTxField::Payee | AddTxField::FromAccount | AddTxField::ToAccount
+                AddTxField::Payee | AddTxField::Category | AddTxField::Account
             ) {
                 let suggestions = form.suggestions_for_current();
                 if !suggestions.is_empty() {
                     let current = match form.focused {
-                        AddTxField::Payee => &form.payee,
-                        AddTxField::FromAccount => &form.from_account,
-                        AddTxField::ToAccount => &form.to_account,
+                        AddTxField::Payee    => &form.payee,
+                        AddTxField::Category => &form.category,
+                        AddTxField::Account  => &form.account,
                         _ => unreachable!(),
                     };
                     if !suggestions.contains(current) {
