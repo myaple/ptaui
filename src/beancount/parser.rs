@@ -58,12 +58,12 @@ impl Ledger {
         balances
     }
 
-    /// Group transactions by month, return (year, month) -> (income, expenses) sums
+    /// Group transactions by month, return sorted `(YYYY-MM, income, expenses)`.
+    /// Only includes months that have at least one Income or Expenses posting.
     pub fn monthly_summary(&self, currency: &str) -> Vec<(String, Decimal, Decimal)> {
         let mut map: HashMap<String, (Decimal, Decimal)> = HashMap::new();
         for txn in &self.transactions {
             let key = txn.date.format("%Y-%m").to_string();
-            let entry = map.entry(key).or_insert((Decimal::ZERO, Decimal::ZERO));
             for posting in &txn.postings {
                 let cur = posting.currency.as_deref().unwrap_or("");
                 if cur != currency {
@@ -72,9 +72,11 @@ impl Ledger {
                 if let Some(amount) = posting.amount {
                     let acct = &posting.account;
                     if acct.starts_with("Income") {
-                        // Income postings are typically negative in beancount
+                        // Income postings are negative in beancount (credit)
+                        let entry = map.entry(key.clone()).or_insert((Decimal::ZERO, Decimal::ZERO));
                         entry.0 += -amount;
                     } else if acct.starts_with("Expenses") {
+                        let entry = map.entry(key.clone()).or_insert((Decimal::ZERO, Decimal::ZERO));
                         entry.1 += amount;
                     }
                 }
@@ -223,9 +225,9 @@ fn extract_quoted_strings(s: &str) -> Vec<&str> {
 }
 
 fn parse_posting(line: &str) -> Option<Posting> {
-    // Format: Account  Amount Currency
-    // or just: Account  (auto-completing posting)
-    let tokens: Vec<&str> = line.splitn(4, ' ').filter(|s| !s.is_empty()).collect();
+    // Beancount uses 2+ spaces between account and amount; split_whitespace
+    // handles any amount of whitespace correctly.
+    let tokens: Vec<&str> = line.split_whitespace().collect();
     let account = tokens.first()?.to_string();
 
     // Must start with a capital letter (beancount account type)
