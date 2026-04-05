@@ -9,7 +9,19 @@ use ratatui::{
 use rust_decimal::prelude::ToPrimitive;
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
-    let summary = app.ledger.monthly_summary(&app.config.currency);
+    let filter = app.active_account_filter();
+    let summary = app.ledger.monthly_summary(&app.config.currency, filter.as_ref());
+
+    // Build a title that shows the active filter state
+    let filter_hint = {
+        let total = app.account_filter.len();
+        let checked = app.account_filter.iter().filter(|(_, c)| *c).count();
+        if total == 0 || checked == total {
+            " c filter accounts ".to_string()
+        } else {
+            format!(" c filter accounts ({}/{}) ", checked, total)
+        }
+    };
 
     if summary.is_empty() {
         let para = Paragraph::new(vec![
@@ -23,8 +35,13 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 "  Transactions using Income:* or Expenses:* accounts will appear here.",
                 Style::default().fg(Color::DarkGray),
             )),
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  Press 'c' to open the account filter."),
+                Style::default().fg(Color::DarkGray),
+            )),
         ])
-        .block(Block::default().borders(Borders::ALL).title(" Reports "));
+        .block(Block::default().borders(Borders::ALL).title(format!(" Reports — {} ", filter_hint)));
         f.render_widget(para, area);
         return;
     }
@@ -34,14 +51,15 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
         .split(area);
 
-    render_bar_chart(f, app, &summary, chunks[0]);
-    render_summary_table(f, &summary, chunks[1]);
+    render_bar_chart(f, app, &summary, &filter_hint, chunks[0]);
+    render_summary_table(f, &summary, &filter_hint, chunks[1]);
 }
 
 fn render_bar_chart(
     f: &mut Frame,
     app: &App,
     summary: &[(String, rust_decimal::Decimal, rust_decimal::Decimal)],
+    filter_hint: &str,
     area: Rect,
 ) {
     // Show last 12 months
@@ -53,8 +71,8 @@ fn render_bar_chart(
             Block::default()
                 .borders(Borders::ALL)
                 .title(format!(
-                    " Monthly Income vs Expenses ({}) — green=income  red=expenses ",
-                    app.config.currency
+                    " Monthly Income vs Expenses ({}) — green=income  red=expenses  |{}",
+                    app.config.currency, filter_hint
                 )),
         )
         .bar_width(4)
@@ -88,6 +106,7 @@ fn render_bar_chart(
 fn render_summary_table(
     f: &mut Frame,
     summary: &[(String, rust_decimal::Decimal, rust_decimal::Decimal)],
+    _filter_hint: &str,
     area: Rect,
 ) {
     let recent: Vec<_> = summary.iter().rev().take(6).rev().collect();

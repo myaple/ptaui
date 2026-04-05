@@ -26,6 +26,7 @@ pub enum Screen {
 pub enum Modal {
     AddTransaction,
     AddAccount,
+    AccountFilter,
 }
 
 // ── Startup state ─────────────────────────────────────────────────────────────
@@ -349,6 +350,12 @@ pub struct App {
     pub status_message: Option<String>,
     pub check_errors: Vec<String>,
     pub running: bool,
+    /// (account_name, is_checked) — persists across modal open/close.
+    pub account_filter: Vec<(String, bool)>,
+    /// Cursor position inside the account filter modal.
+    pub account_filter_cursor: usize,
+    /// Scroll offset inside the account filter modal list.
+    pub account_filter_scroll: usize,
 }
 
 impl App {
@@ -358,7 +365,7 @@ impl App {
         } else {
             Screen::Dashboard
         };
-        Self {
+        let mut app = Self {
             config,
             ledger,
             file_found,
@@ -372,6 +379,56 @@ impl App {
             status_message: None,
             check_errors: Vec::new(),
             running: true,
+            account_filter: Vec::new(),
+            account_filter_cursor: 0,
+            account_filter_scroll: 0,
+        };
+        app.rebuild_account_filter();
+        app
+    }
+
+    /// Rebuild the account filter list from current ledger Income/Expenses accounts.
+    /// Existing checked state is preserved for accounts that still exist.
+    pub fn rebuild_account_filter(&mut self) {
+        use std::collections::{HashMap, HashSet};
+        let existing: HashMap<String, bool> = self.account_filter.iter().cloned().collect();
+        let mut seen: HashSet<String> = HashSet::new();
+        for txn in &self.ledger.transactions {
+            for posting in &txn.postings {
+                let acct = &posting.account;
+                if acct.starts_with("Income") || acct.starts_with("Expenses") {
+                    seen.insert(acct.clone());
+                }
+            }
+        }
+        let mut sorted: Vec<String> = seen.into_iter().collect();
+        sorted.sort();
+        self.account_filter = sorted
+            .into_iter()
+            .map(|a| {
+                let checked = existing.get(&a).copied().unwrap_or(true);
+                (a, checked)
+            })
+            .collect();
+        if self.account_filter_cursor >= self.account_filter.len() {
+            self.account_filter_cursor = 0;
+            self.account_filter_scroll = 0;
+        }
+    }
+
+    /// Returns `None` when all accounts are enabled (no filtering needed),
+    /// or `Some(set)` containing only the checked account names.
+    pub fn active_account_filter(&self) -> Option<std::collections::HashSet<String>> {
+        if self.account_filter.iter().all(|(_, c)| *c) {
+            None
+        } else {
+            Some(
+                self.account_filter
+                    .iter()
+                    .filter(|(_, c)| *c)
+                    .map(|(a, _)| a.clone())
+                    .collect(),
+            )
         }
     }
 
@@ -384,6 +441,7 @@ impl App {
         } else {
             self.file_found = false;
         }
+        self.rebuild_account_filter();
         Ok(())
     }
 
@@ -476,6 +534,10 @@ impl App {
             Modal::AddAccount => {
                 self.add_account_form = Some(AddAccountForm::new(&self.config.currency));
             }
+            Modal::AccountFilter => {
+                // Ensure the list is up-to-date; preserve existing selections.
+                self.rebuild_account_filter();
+            }
         }
         self.modal = Some(modal);
         // Don't clear status_message — it stays visible in the background
@@ -486,6 +548,7 @@ impl App {
         self.modal = None;
         self.add_tx_form = None;
         self.add_account_form = None;
+        // account_filter state is intentionally kept across close so selections persist.
     }
 
     /// Commit the current add_account_form to the beancount file.

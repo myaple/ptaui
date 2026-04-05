@@ -1,3 +1,4 @@
+pub mod account_filter;
 pub mod add_account;
 pub mod add_tx;
 pub mod dashboard;
@@ -45,6 +46,7 @@ pub fn render(f: &mut Frame, app: &App) {
     match &app.modal {
         Some(Modal::AddTransaction) => add_tx::render_modal(f, app),
         Some(Modal::AddAccount) => add_account::render_modal(f, app),
+        Some(Modal::AccountFilter) => account_filter::render_modal(f, app),
         None => {}
     }
 }
