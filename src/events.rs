@@ -31,15 +31,15 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
                 return Ok(());
             }
             KeyCode::Char('3') => {
-                app.open_modal(Modal::AddTransaction);
-                return Ok(());
-            }
-            KeyCode::Char('4') => {
                 app.navigate_to(Screen::Reports);
                 return Ok(());
             }
+            // 'a' is context-sensitive: add account on Dashboard, add transaction on Transactions
             KeyCode::Char('a') => {
-                app.open_modal(Modal::AddAccount);
+                match app.screen {
+                    Screen::Transactions => app.open_modal(Modal::AddTransaction),
+                    _ => app.open_modal(Modal::AddAccount),
+                }
                 return Ok(());
             }
             KeyCode::Char('c') if app.screen == Screen::Dashboard && !app.file_found => {

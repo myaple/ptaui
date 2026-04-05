@@ -50,11 +50,11 @@ pub fn render(f: &mut Frame, app: &App) {
 }
 
 fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
-    let titles = vec!["[1] Accounts", "[2] Transactions", "[3] Add Txn", "[4] Reports"];
+    let titles = vec!["[1] Accounts", "[2] Transactions", "[3] Reports"];
     let selected = match app.screen {
         Screen::Dashboard => 0,
         Screen::Transactions => 1,
-        Screen::Reports => 3,
+        Screen::Reports => 2,
         Screen::Startup => 0,
     };
     let tabs = Tabs::new(titles)
@@ -82,7 +82,7 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
     } else {
         let file = app.config.resolved_beancount_file();
         format!(
-            " {} | q quit  1-4 screens  3/a add  r reload",
+            " {} | q quit  1-3 screens  a add  r reload",
             file.display()
         )
     };
