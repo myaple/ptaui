@@ -37,8 +37,9 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
             // 'a' is context-sensitive: add account on Dashboard, add transaction on Transactions
             KeyCode::Char('a') => {
                 match app.screen {
+                    Screen::Dashboard => app.open_modal(Modal::AddAccount),
                     Screen::Transactions => app.open_modal(Modal::AddTransaction),
-                    _ => app.open_modal(Modal::AddAccount),
+                    _ => {}
                 }
                 return Ok(());
             }
