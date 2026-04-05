@@ -921,6 +921,23 @@ impl App {
             None => format!("Account '{}' added.", account_name),
         }];
 
+        if self.config.auto_bean_check {
+            match bean_check(&path) {
+                CheckResult::Ok => {
+                    status_parts.push("bean-check: OK".to_string());
+                    self.check_errors.clear();
+                }
+                CheckResult::Errors(errs) => {
+                    status_parts.push(format!("bean-check: {} error(s)", errs.len()));
+                    self.check_errors = errs;
+                }
+                CheckResult::NotInstalled => {
+                    status_parts.push("(bean-check not installed)".to_string());
+                    self.check_errors.clear();
+                }
+            }
+        }
+
         if git::is_git_repo(path.parent().unwrap_or(&path)) {
             let msg = format!("account: open {}", account_name);
             match git::commit_file(&path, &msg) {
