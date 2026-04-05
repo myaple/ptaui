@@ -24,20 +24,19 @@ fn main() -> Result<()> {
     let config_path = Config::config_path()?;
 
     // Load ledger (ok if file doesn't exist yet)
-    let ledger = {
-        let path = config.resolved_beancount_file();
-        if path.exists() {
-            let source = std::fs::read_to_string(&path)
-                .with_context(|| format!("Reading beancount file: {}", path.display()))?;
-            parser::parse(&source).context("Parsing beancount file")?
-        } else {
-            parser::Ledger::default()
-        }
+    let beancount_path = config.resolved_beancount_file();
+    let file_found = beancount_path.exists();
+    let ledger = if file_found {
+        let source = std::fs::read_to_string(&beancount_path)
+            .with_context(|| format!("Reading beancount file: {}", beancount_path.display()))?;
+        parser::parse(&source).context("Parsing beancount file")?
+    } else {
+        parser::Ledger::default()
     };
 
     // Determine git status of the beancount file's directory
     let git_status = {
-        let path = config.resolved_beancount_file();
+        let path = &beancount_path;
         if let Some(dir) = path.parent() {
             if !dir.exists() || !path.exists() {
                 GitStatus::NoFile
@@ -59,7 +58,7 @@ fn main() -> Result<()> {
         git_init_result: None,
     };
 
-    let mut app = App::new(config, ledger, startup);
+    let mut app = App::new(config, ledger, file_found, startup);
 
     // Set up terminal
     enable_raw_mode()?;
