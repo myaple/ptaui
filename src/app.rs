@@ -3,7 +3,7 @@ use crate::beancount::validator::{bean_check, CheckResult};
 use crate::beancount::writer::{append_account_open, append_transaction, NewPosting, NewTransaction};
 use crate::config::Config;
 use crate::git;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Local;
 use rust_decimal::Decimal;
 use std::path::PathBuf;
@@ -299,6 +299,60 @@ impl App {
         } else {
             self.file_found = false;
         }
+        Ok(())
+    }
+
+    /// Create the beancount file (and its parent directory) from scratch,
+    /// then init git in that directory if it isn't already a repo,
+    /// and make an initial commit.
+    pub fn create_beancount_file(&mut self) -> Result<()> {
+        let path = self.config.resolved_beancount_file();
+
+        // Create parent directory if needed
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)
+                .with_context(|| format!("Creating directory {}", dir.display()))?;
+        }
+
+        // Write a minimal starter file
+        let starter = format!(
+            "; Beancount file managed by ptaui\n\
+             option \"title\" \"My Finances\"\n\
+             option \"operating_currency\" \"{}\"\n",
+            self.config.currency
+        );
+        std::fs::write(&path, &starter)
+            .with_context(|| format!("Creating {}", path.display()))?;
+
+        self.file_found = true;
+        self.reload_ledger()?;
+
+        let mut status_parts = vec![format!("Created {}", path.display())];
+
+        // Init git if not already a repo
+        let dir = path.parent().unwrap_or(&path);
+        if !git::is_git_repo(dir) {
+            match git::init_repo(dir) {
+                Ok(_) => {
+                    self.startup.git_status = GitStatus::Controlled;
+                    status_parts.push("git init: done".to_string());
+                }
+                Err(e) => {
+                    status_parts.push(format!("git init failed: {}", e));
+                }
+            }
+        }
+
+        // Initial commit
+        if git::is_git_repo(dir) {
+            self.startup.git_status = GitStatus::Controlled;
+            match git::commit_file(&path, "chore: initial beancount file") {
+                Ok(()) => status_parts.push("git: initial commit".to_string()),
+                Err(e) => status_parts.push(format!("git: {}", e)),
+            }
+        }
+
+        self.status_message = Some(status_parts.join("  |  "));
         Ok(())
     }
 
