@@ -1,3 +1,4 @@
+pub mod add_account;
 pub mod add_tx;
 pub mod dashboard;
 pub mod reports;
@@ -35,6 +36,7 @@ pub fn render(f: &mut Frame, app: &App) {
         Screen::Dashboard => dashboard::render(f, app, chunks[1]),
         Screen::Transactions => transactions::render(f, app, chunks[1]),
         Screen::AddTransaction => add_tx::render(f, app, chunks[1]),
+        Screen::AddAccount => add_account::render(f, app, chunks[1]),
         Screen::Reports => reports::render(f, app, chunks[1]),
         Screen::Startup => unreachable!(),
     }
@@ -47,7 +49,7 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
     let selected = match app.screen {
         Screen::Dashboard => 0,
         Screen::Transactions => 1,
-        Screen::AddTransaction => 2,
+        Screen::AddTransaction | Screen::AddAccount => 2,
         Screen::Reports => 3,
         Screen::Startup => 0,
     };

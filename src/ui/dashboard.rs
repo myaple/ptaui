@@ -1,6 +1,6 @@
 use crate::app::App;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
@@ -31,28 +31,54 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     }
 
     if app.ledger.accounts.is_empty() {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0)])
-            .split(area);
-        let para = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(Span::styled(
-                "  No beancount file loaded or no accounts found.",
-                Style::default().fg(Color::Yellow),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                "  Configure your file in ~/.config/ptaui/config.json",
-                Style::default().fg(Color::DarkGray),
-            )),
-            Line::from(Span::styled(
-                "  then press 'r' to reload.",
-                Style::default().fg(Color::DarkGray),
-            )),
-        ])
-        .block(Block::default().borders(Borders::ALL).title(" Accounts "));
-        f.render_widget(para, chunks[0]);
+        let lines = if !app.file_found {
+            vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  Beancount file not found.",
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    format!("  Expected: {}", app.config.resolved_beancount_file().display()),
+                    Style::default().fg(Color::Yellow),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  Edit ~/.config/ptaui/config.json to set the correct path,",
+                    Style::default().fg(Color::DarkGray),
+                )),
+                Line::from(Span::styled(
+                    "  then press r to reload.",
+                    Style::default().fg(Color::DarkGray),
+                )),
+            ]
+        } else {
+            vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  No accounts declared in this beancount file.",
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  Press a to add your first account.",
+                    Style::default().fg(Color::Cyan),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  Accounts are declared with 'open' directives, e.g.:",
+                    Style::default().fg(Color::DarkGray),
+                )),
+                Line::from(Span::styled(
+                    "  2024-01-01 open Assets:Checking USD",
+                    Style::default().fg(Color::DarkGray),
+                )),
+            ]
+        };
+        let para = Paragraph::new(lines)
+            .block(Block::default().borders(Borders::ALL).title(" Accounts "));
+        f.render_widget(para, area);
         return;
     }
 

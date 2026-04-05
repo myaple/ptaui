@@ -53,6 +53,31 @@ pub fn format_transaction(txn: &NewTransaction) -> String {
     out
 }
 
+/// Append an `open` directive for a new account.
+pub fn append_account_open(path: &Path, date: NaiveDate, account: &str, currencies: &[String]) -> Result<()> {
+    let cur_str = if currencies.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", currencies.join(", "))
+    };
+    let line = format!("{} open {}{}\n", date.format("%Y-%m-%d"), account, cur_str);
+
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let separator = if existing.ends_with('\n') || existing.is_empty() { "\n" } else { "\n\n" };
+    let content = format!("{}{}", separator, line);
+
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(path)
+        .with_context(|| format!("Opening beancount file for append: {}", path.display()))?;
+    file.write_all(content.as_bytes())
+        .with_context(|| format!("Writing account open to {}", path.display()))?;
+    Ok(())
+}
+
 pub fn append_transaction(path: &Path, txn: &NewTransaction) -> Result<()> {
     let formatted = format_transaction(txn);
     // Ensure file ends with a newline before appending

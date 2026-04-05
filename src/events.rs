@@ -1,4 +1,4 @@
-use crate::app::{AddTxField, App, GitStatus, Screen, StartupGitChoice};
+use crate::app::{AddAccountField, AddTxField, App, GitStatus, Screen, StartupGitChoice, ACCOUNT_TYPES};
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 
@@ -9,29 +9,35 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
             return handle_startup(app, key);
         }
 
-        // Global keys (not available during add transaction)
+        // Global keys (not available during add transaction/account)
+        let in_form = matches!(app.screen, Screen::AddTransaction | Screen::AddAccount);
         match key.code {
-            KeyCode::Char('q') if app.screen != Screen::AddTransaction => {
+            KeyCode::Char('q') if !in_form => {
                 app.running = false;
                 return Ok(());
             }
-            KeyCode::Char('1') if app.screen != Screen::AddTransaction => {
+            KeyCode::Char('1') if !in_form => {
                 app.navigate_to(Screen::Dashboard);
                 return Ok(());
             }
-            KeyCode::Char('2') if app.screen != Screen::AddTransaction => {
+            KeyCode::Char('2') if !in_form => {
                 app.navigate_to(Screen::Transactions);
                 return Ok(());
             }
-            KeyCode::Char('3') => {
+            KeyCode::Char('3') if !in_form => {
                 app.navigate_to(Screen::AddTransaction);
                 return Ok(());
             }
-            KeyCode::Char('4') if app.screen != Screen::AddTransaction => {
+            KeyCode::Char('4') if !in_form => {
                 app.navigate_to(Screen::Reports);
                 return Ok(());
             }
-            KeyCode::Char('r') if app.screen != Screen::AddTransaction => {
+            // 'a' opens Add Account from dashboard or transaction list
+            KeyCode::Char('a') if matches!(app.screen, Screen::Dashboard | Screen::Transactions) => {
+                app.navigate_to(Screen::AddAccount);
+                return Ok(());
+            }
+            KeyCode::Char('r') if !in_form => {
                 app.reload_ledger()?;
                 app.status_message = Some("Ledger reloaded.".to_string());
                 return Ok(());
@@ -43,6 +49,7 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
             Screen::Dashboard => handle_dashboard(app, key),
             Screen::Transactions => handle_transactions(app, key),
             Screen::AddTransaction => handle_add_tx(app, key)?,
+            Screen::AddAccount => handle_add_account(app, key)?,
             Screen::Reports => {}
             Screen::Startup => unreachable!(),
         }
@@ -206,6 +213,79 @@ fn handle_add_tx(app: &mut App, key: KeyEvent) -> Result<()> {
             if form.focused != AddTxField::Confirm {
                 let field = form.current_field_mut();
                 field.push(c);
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn handle_add_account(app: &mut App, key: KeyEvent) -> Result<()> {
+    let form = match app.add_account_form.as_mut() {
+        Some(f) => f,
+        None => return Ok(()),
+    };
+
+    match key.code {
+        KeyCode::Esc => {
+            app.navigate_to(Screen::Dashboard);
+            return Ok(());
+        }
+        // Cycle account type with left/right arrows
+        KeyCode::Left | KeyCode::Char('h')
+            if form.focused == AddAccountField::AccountType =>
+        {
+            form.type_idx = if form.type_idx == 0 {
+                ACCOUNT_TYPES.len() - 1
+            } else {
+                form.type_idx - 1
+            };
+        }
+        KeyCode::Right | KeyCode::Char('l')
+            if form.focused == AddAccountField::AccountType =>
+        {
+            form.type_idx = (form.type_idx + 1) % ACCOUNT_TYPES.len();
+        }
+        KeyCode::Tab | KeyCode::Down => {
+            let next = form.focused.next();
+            form.focused = next;
+        }
+        KeyCode::BackTab | KeyCode::Up => {
+            let prev = form.focused.prev();
+            form.focused = prev;
+        }
+        KeyCode::Enter => {
+            if form.focused == AddAccountField::Confirm {
+                match app.commit_account() {
+                    Ok(()) => {
+                        app.screen = Screen::Dashboard;
+                        app.add_account_form = None;
+                    }
+                    Err(e) => {
+                        if let Some(form) = app.add_account_form.as_mut() {
+                            form.error = Some(e.to_string());
+                        }
+                    }
+                }
+            } else {
+                let next = form.focused.next();
+                form.focused = next;
+            }
+        }
+        KeyCode::Backspace => {
+            match form.focused {
+                AddAccountField::SubName => { form.sub_name.pop(); }
+                AddAccountField::Currencies => { form.currencies.pop(); }
+                AddAccountField::Date => { form.date.pop(); }
+                _ => {}
+            }
+        }
+        KeyCode::Char(c) => {
+            match form.focused {
+                AddAccountField::SubName => form.sub_name.push(c),
+                AddAccountField::Currencies => form.currencies.push(c),
+                AddAccountField::Date => form.date.push(c),
+                _ => {}
             }
         }
         _ => {}

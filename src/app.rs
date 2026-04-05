@@ -1,6 +1,6 @@
 use crate::beancount::parser::Ledger;
 use crate::beancount::validator::{bean_check, CheckResult};
-use crate::beancount::writer::{append_transaction, NewPosting, NewTransaction};
+use crate::beancount::writer::{append_account_open, append_transaction, NewPosting, NewTransaction};
 use crate::config::Config;
 use crate::git;
 use anyhow::Result;
@@ -18,6 +18,7 @@ pub enum Screen {
     Dashboard,
     Transactions,
     AddTransaction,
+    AddAccount,
     Reports,
 }
 
@@ -180,23 +181,94 @@ impl AddTxForm {
     }
 }
 
+// ── Add Account form ──────────────────────────────────────────────────────────
+
+pub const ACCOUNT_TYPES: &[&str] = &["Assets", "Liabilities", "Income", "Expenses", "Equity"];
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AddAccountField {
+    AccountType,
+    SubName,
+    Currencies,
+    Date,
+    Confirm,
+}
+
+impl AddAccountField {
+    pub fn next(&self) -> Self {
+        match self {
+            Self::AccountType => Self::SubName,
+            Self::SubName => Self::Currencies,
+            Self::Currencies => Self::Date,
+            Self::Date => Self::Confirm,
+            Self::Confirm => Self::AccountType,
+        }
+    }
+    pub fn prev(&self) -> Self {
+        match self {
+            Self::AccountType => Self::Confirm,
+            Self::SubName => Self::AccountType,
+            Self::Currencies => Self::SubName,
+            Self::Date => Self::Currencies,
+            Self::Confirm => Self::Date,
+        }
+    }
+}
+
+pub struct AddAccountForm {
+    /// Index into ACCOUNT_TYPES
+    pub type_idx: usize,
+    /// Sub-path after the type, e.g. "Checking" or "Food:Restaurants"
+    pub sub_name: String,
+    /// Space-separated currencies, e.g. "USD"
+    pub currencies: String,
+    pub date: String,
+    pub focused: AddAccountField,
+    pub error: Option<String>,
+}
+
+impl AddAccountForm {
+    pub fn new(default_currency: &str) -> Self {
+        Self {
+            type_idx: 0,
+            sub_name: String::new(),
+            currencies: default_currency.to_string(),
+            date: Local::now().date_naive().format("%Y-%m-%d").to_string(),
+            focused: AddAccountField::AccountType,
+            error: None,
+        }
+    }
+
+    pub fn account_name(&self) -> String {
+        let t = ACCOUNT_TYPES[self.type_idx];
+        if self.sub_name.trim().is_empty() {
+            t.to_string()
+        } else {
+            format!("{}:{}", t, self.sub_name.trim())
+        }
+    }
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 pub struct App {
     pub config: Config,
     pub ledger: Ledger,
+    /// True when the beancount file was found and successfully read.
+    pub file_found: bool,
     pub screen: Screen,
     pub startup: StartupState,
     pub tx_scroll: usize,
     pub dashboard_scroll: usize,
     pub add_tx_form: Option<AddTxForm>,
+    pub add_account_form: Option<AddAccountForm>,
     pub status_message: Option<String>,
     pub check_errors: Vec<String>,
     pub running: bool,
 }
 
 impl App {
-    pub fn new(config: Config, ledger: Ledger, startup: StartupState) -> Self {
+    pub fn new(config: Config, ledger: Ledger, file_found: bool, startup: StartupState) -> Self {
         let initial_screen = if startup.needs_display() {
             Screen::Startup
         } else {
@@ -205,11 +277,13 @@ impl App {
         Self {
             config,
             ledger,
+            file_found,
             screen: initial_screen,
             startup,
             tx_scroll: 0,
             dashboard_scroll: 0,
             add_tx_form: None,
+            add_account_form: None,
             status_message: None,
             check_errors: Vec::new(),
             running: true,
@@ -221,6 +295,9 @@ impl App {
         if path.exists() {
             let source = std::fs::read_to_string(&path)?;
             self.ledger = crate::beancount::parser::parse(&source)?;
+            self.file_found = true;
+        } else {
+            self.file_found = false;
         }
         Ok(())
     }
@@ -230,13 +307,70 @@ impl App {
     }
 
     pub fn navigate_to(&mut self, screen: Screen) {
-        if let Screen::AddTransaction = screen {
-            let accounts = self.account_names();
-            self.add_tx_form = Some(AddTxForm::new(&self.config.currency, &accounts));
+        match screen {
+            Screen::AddTransaction => {
+                let accounts = self.account_names();
+                self.add_tx_form = Some(AddTxForm::new(&self.config.currency, &accounts));
+            }
+            Screen::AddAccount => {
+                self.add_account_form = Some(AddAccountForm::new(&self.config.currency));
+            }
+            _ => {}
         }
         self.screen = screen;
         self.status_message = None;
         self.check_errors.clear();
+    }
+
+    /// Commit the current add_account_form to the beancount file.
+    pub fn commit_account(&mut self) -> Result<()> {
+        let form = self.add_account_form.as_ref().unwrap();
+
+        let date = chrono::NaiveDate::parse_from_str(&form.date, "%Y-%m-%d")
+            .map_err(|_| anyhow::anyhow!("Invalid date format. Use YYYY-MM-DD"))?;
+
+        if form.sub_name.trim().is_empty() {
+            anyhow::bail!("Account sub-name cannot be empty");
+        }
+        // Validate: only letters, digits, colons, hyphens
+        let sub = form.sub_name.trim();
+        if !sub.chars().all(|c| c.is_alphanumeric() || c == ':' || c == '-' || c == '_') {
+            anyhow::bail!("Account name may only contain letters, digits, ':', '-', '_'");
+        }
+        // Each segment must start with uppercase
+        for segment in sub.split(':') {
+            if segment.is_empty() {
+                anyhow::bail!("Account name segments cannot be empty");
+            }
+            if !segment.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                anyhow::bail!("Each account segment must start with an uppercase letter (got \"{}\")", segment);
+            }
+        }
+
+        let account_name = form.account_name();
+        let currencies: Vec<String> = form
+            .currencies
+            .split_whitespace()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim_matches(',').to_uppercase())
+            .collect();
+
+        let path = self.config.resolved_beancount_file();
+        append_account_open(&path, date, &account_name, &currencies)?;
+        self.reload_ledger()?;
+
+        let mut status_parts = vec![format!("Account '{}' added.", account_name)];
+
+        if git::is_git_repo(path.parent().unwrap_or(&path)) {
+            let msg = format!("account: open {}", account_name);
+            match git::commit_file(&path, &msg) {
+                Ok(()) => status_parts.push("git: committed".to_string()),
+                Err(e) => status_parts.push(format!("git: {}", e)),
+            }
+        }
+
+        self.status_message = Some(status_parts.join("  |  "));
+        Ok(())
     }
 
     /// Handle the user pressing Enter/Y on the startup screen's git init prompt.
