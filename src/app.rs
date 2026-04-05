@@ -4,7 +4,7 @@ use crate::beancount::writer::{append_account_open, append_transaction, replace_
 use crate::config::Config;
 use crate::git;
 use anyhow::{Context, Result};
-use chrono::Local;
+use chrono::{Datelike, Local};
 use rust_decimal::Decimal;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -28,6 +28,112 @@ pub enum Modal {
     EditTransaction,
     AddAccount,
     AccountFilter,
+    /// Transactions for a specific category in the current breakdown period.
+    CategoryTransactions,
+}
+
+// ── Reports view state ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReportsView {
+    /// Monthly income vs expenses bar chart (existing).
+    Monthly,
+    /// Per-category breakdown for a specific period.
+    Breakdown,
+}
+
+/// The time period shown in the category breakdown view.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BreakdownPeriod {
+    Month { year: i32, month: u32 },
+    Year { year: i32 },
+}
+
+impl BreakdownPeriod {
+    pub fn current_month() -> Self {
+        let now = Local::now().date_naive();
+        Self::Month { year: now.year(), month: now.month() }
+    }
+
+    pub fn label(&self) -> String {
+        match self {
+            Self::Month { year, month } => format!("{:04}-{:02}", year, month),
+            Self::Year { year } => format!("{:04}", year),
+        }
+    }
+
+    pub fn start(&self) -> chrono::NaiveDate {
+        match self {
+            Self::Month { year, month } => {
+                chrono::NaiveDate::from_ymd_opt(*year, *month, 1).unwrap()
+            }
+            Self::Year { year } => {
+                chrono::NaiveDate::from_ymd_opt(*year, 1, 1).unwrap()
+            }
+        }
+    }
+
+    /// Exclusive end date (first day after the period).
+    pub fn end(&self) -> chrono::NaiveDate {
+        match self {
+            Self::Month { year, month } => {
+                if *month == 12 {
+                    chrono::NaiveDate::from_ymd_opt(year + 1, 1, 1).unwrap()
+                } else {
+                    chrono::NaiveDate::from_ymd_opt(*year, month + 1, 1).unwrap()
+                }
+            }
+            Self::Year { year } => {
+                chrono::NaiveDate::from_ymd_opt(year + 1, 1, 1).unwrap()
+            }
+        }
+    }
+
+    pub fn prev(&self) -> Self {
+        match self {
+            Self::Month { year, month } => {
+                if *month == 1 {
+                    Self::Month { year: year - 1, month: 12 }
+                } else {
+                    Self::Month { year: *year, month: month - 1 }
+                }
+            }
+            Self::Year { year } => Self::Year { year: year - 1 },
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        match self {
+            Self::Month { year, month } => {
+                if *month == 12 {
+                    Self::Month { year: year + 1, month: 1 }
+                } else {
+                    Self::Month { year: *year, month: month + 1 }
+                }
+            }
+            Self::Year { year } => Self::Year { year: year + 1 },
+        }
+    }
+
+    /// Switch to monthly mode, keeping the same year and month (or Jan for year mode).
+    pub fn as_month(&self) -> Self {
+        match self {
+            Self::Month { .. } => self.clone(),
+            Self::Year { year } => Self::Month { year: *year, month: 1 },
+        }
+    }
+
+    /// Switch to yearly mode, keeping the same year.
+    pub fn as_year(&self) -> Self {
+        match self {
+            Self::Month { year, .. } => Self::Year { year: *year },
+            Self::Year { .. } => self.clone(),
+        }
+    }
+
+    pub fn is_month(&self) -> bool {
+        matches!(self, Self::Month { .. })
+    }
 }
 
 // ── Startup state ─────────────────────────────────────────────────────────────
@@ -362,6 +468,21 @@ pub struct App {
     pub account_filter_cursor: usize,
     /// Scroll offset inside the account filter modal list.
     pub account_filter_scroll: usize,
+    // ── Reports state ──────────────────────────────────────────────────────
+    /// Whether to show the monthly bar chart or the per-category breakdown.
+    pub reports_view: ReportsView,
+    /// The period displayed in the category breakdown view.
+    pub breakdown_period: BreakdownPeriod,
+    /// Selected category row index in the breakdown list.
+    pub breakdown_cursor: usize,
+    /// Scroll offset for the breakdown list.
+    pub breakdown_scroll: usize,
+    /// The category name currently open in the CategoryTransactions modal.
+    pub category_tx_category: String,
+    /// Scroll offset inside the category transactions modal.
+    pub category_tx_scroll: usize,
+    /// Selected transaction index inside the category transactions modal.
+    pub category_tx_cursor: usize,
 }
 
 impl App {
@@ -390,6 +511,13 @@ impl App {
             account_filter: Vec::new(),
             account_filter_cursor: 0,
             account_filter_scroll: 0,
+            reports_view: ReportsView::Monthly,
+            breakdown_period: BreakdownPeriod::current_month(),
+            breakdown_cursor: 0,
+            breakdown_scroll: 0,
+            category_tx_category: String::new(),
+            category_tx_scroll: 0,
+            category_tx_cursor: 0,
         };
         app.rebuild_account_filter();
         app
@@ -615,6 +743,9 @@ impl App {
             }
             Modal::EditTransaction => {
                 // Opened via open_edit_tx_modal() which sets up form state directly.
+            }
+            Modal::CategoryTransactions => {
+                // State set by the caller before calling open_modal.
             }
         }
         self.modal = Some(modal);

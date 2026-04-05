@@ -102,6 +102,80 @@ impl Ledger {
             })
             .collect()
     }
+
+    /// Compute per-category totals for transactions whose date is in [from, to).
+    /// Returns `(category, amount)` sorted by amount descending.
+    /// Expenses:* amounts are positive; Income:* amounts are positive (negated from beancount).
+    /// When `filter` is `Some`, only categories in that set are counted.
+    pub fn category_breakdown(
+        &self,
+        currency: &str,
+        from: NaiveDate,
+        to: NaiveDate,
+        filter: Option<&std::collections::HashSet<String>>,
+    ) -> Vec<(String, Decimal)> {
+        let mut map: HashMap<String, Decimal> = HashMap::new();
+        for txn in &self.transactions {
+            if txn.date < from || txn.date >= to {
+                continue;
+            }
+            for posting in &txn.postings {
+                let cur = posting.currency.as_deref().unwrap_or("");
+                if cur != currency {
+                    continue;
+                }
+                if let Some(ref f) = filter {
+                    if !f.contains(&posting.account) {
+                        continue;
+                    }
+                }
+                if let Some(amount) = posting.amount {
+                    let acct = &posting.account;
+                    if acct.starts_with("Expenses") {
+                        *map.entry(acct.clone()).or_insert(Decimal::ZERO) += amount;
+                    } else if acct.starts_with("Income") {
+                        // Income postings are negative in beancount; negate to get positive
+                        *map.entry(acct.clone()).or_insert(Decimal::ZERO) += -amount;
+                    }
+                }
+            }
+        }
+        let mut result: Vec<(String, Decimal)> = map.into_iter().collect();
+        // Sort by amount descending (largest expense / largest income first)
+        result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        result
+    }
+
+    /// Return all transactions that touch `category` in [from, to) for `currency`,
+    /// sorted by the absolute posting amount for that category, descending.
+    pub fn transactions_for_category(
+        &self,
+        currency: &str,
+        from: NaiveDate,
+        to: NaiveDate,
+        category: &str,
+    ) -> Vec<Transaction> {
+        let mut result: Vec<(Transaction, Decimal)> = Vec::new();
+        for txn in &self.transactions {
+            if txn.date < from || txn.date >= to {
+                continue;
+            }
+            // Find the posting for this category
+            let posting_amount = txn.postings.iter().find_map(|p| {
+                if p.account == category && p.currency.as_deref().unwrap_or("") == currency {
+                    p.amount
+                } else {
+                    None
+                }
+            });
+            if let Some(amt) = posting_amount {
+                result.push((txn.clone(), amt.abs()));
+            }
+        }
+        // Sort by absolute posting amount descending
+        result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        result.into_iter().map(|(txn, _)| txn).collect()
+    }
 }
 
 pub fn parse(source: &str) -> Result<Ledger> {
