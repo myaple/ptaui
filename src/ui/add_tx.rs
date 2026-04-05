@@ -47,13 +47,13 @@ fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let form = app.add_tx_form.as_ref().unwrap();
 
     let fields: &[(AddTxField, &str, &str)] = &[
-        (AddTxField::Date,        "Date       ", &form.date),
-        (AddTxField::Payee,       "Payee      ", &form.payee),
-        (AddTxField::Narration,   "Narration  ", &form.narration),
-        (AddTxField::FromAccount, "From Acct  ", &form.from_account),
-        (AddTxField::ToAccount,   "To Acct    ", &form.to_account),
-        (AddTxField::Amount,      "Amount     ", &form.amount),
-        (AddTxField::Currency,    "Currency   ", &form.currency),
+        (AddTxField::Date,      "Date       ", &form.date),
+        (AddTxField::Payee,     "Payee      ", &form.payee),
+        (AddTxField::Narration, "Narration  ", &form.narration),
+        (AddTxField::Category,  "Category   ", &form.category),
+        (AddTxField::Account,   "Account    ", &form.account),
+        (AddTxField::Amount,    "Amount     ", &form.amount),
+        (AddTxField::Currency,  "Currency   ", &form.currency),
     ];
 
     let mut lines: Vec<Line> = vec![Line::from("")];
@@ -111,7 +111,9 @@ fn render_suggestions_and_help(f: &mut Frame, app: &App, area: ratatui::layout::
     let (placeholder, pane_title) = match form.focused {
         AddTxField::Payee =>
             (" Start typing to see payees…", " Suggestions — Payee "),
-        AddTxField::FromAccount | AddTxField::ToAccount =>
+        AddTxField::Category =>
+            (" Start typing to see categories…", " Suggestions — Category "),
+        AddTxField::Account =>
             (" Start typing to see accounts…", " Suggestions — Account "),
         _ =>
             (" (no suggestions for this field)", " Suggestions "),
@@ -147,11 +149,11 @@ fn render_suggestions_and_help(f: &mut Frame, app: &App, area: ratatui::layout::
         Line::from(Span::styled("  Esc        Cancel", Style::default().fg(Color::White))),
         Line::from(""),
         Line::from(Span::styled("  Autocomplete (Tab)", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled("  Payee, From, To", Style::default().fg(Color::White))),
+        Line::from(Span::styled("  Payee, Category, Account", Style::default().fg(Color::White))),
         Line::from(""),
         Line::from(Span::styled("  Double-entry", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled("  From → source (debit)", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  To   → target (credit)", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("  Category → Expenses:*", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("  Account  → payment src", Style::default().fg(Color::DarkGray))),
     ])
     .block(Block::default().borders(Borders::ALL).title(" Help "));
 
