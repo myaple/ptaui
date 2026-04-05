@@ -716,7 +716,7 @@ impl App {
             .filter_map(|t| t.payee.clone())
             .filter(|p| seen.insert(p.clone()))
             .collect();
-        payees.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        payees.sort_by_key(|a| a.to_lowercase());
         payees
     }
 
@@ -890,7 +890,7 @@ impl App {
                 .iter()
                 .any(|a| a.name == EQUITY_ACCT);
             if !already_open {
-                append_account_open(&path, date, EQUITY_ACCT, &[currency.clone()])?;
+                append_account_open(&path, date, EQUITY_ACCT, std::slice::from_ref(currency))?;
             }
 
             let opening_txn = NewTransaction {
@@ -1149,10 +1149,6 @@ impl App {
         }
 
         self.status_message = Some(status_parts.join("  |  "));
-
-        if self.config.launch_fava_after_entry {
-            let _ = crate::beancount::validator::launch_fava(&path, self.config.fava_port);
-        }
 
         Ok(())
     }

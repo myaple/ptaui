@@ -74,7 +74,7 @@ impl Ledger {
                 if cur != currency {
                     continue;
                 }
-                if let Some(ref f) = filter {
+                if let Some(f) = filter {
                     if !f.contains(&posting.account) {
                         continue;
                     }
@@ -124,7 +124,7 @@ impl Ledger {
                 if cur != currency {
                     continue;
                 }
-                if let Some(ref f) = filter {
+                if let Some(f) = filter {
                     if !f.contains(&posting.account) {
                         continue;
                     }
@@ -272,7 +272,7 @@ fn parse_txn_header(s: &str) -> (Option<String>, String, Vec<String>) {
     let mut parts_no_tags = Vec::new();
     for token in s.split_whitespace() {
         if token.starts_with('#') {
-            tags.push(token[1..].to_string());
+            tags.push(token.strip_prefix('#').unwrap().to_string());
         } else {
             parts_no_tags.push(token);
         }

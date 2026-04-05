@@ -60,7 +60,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             let accounts: Vec<String> = txn
                 .postings
                 .iter()
-                .map(|p| p.account.split(':').last().unwrap_or(&p.account).to_string())
+                .map(|p| p.account.split(':').next_back().unwrap_or(&p.account).to_string())
                 .collect();
             let accounts_str = accounts.join(" / ");
 
@@ -104,7 +104,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 ),
                 Span::raw("  "),
                 Span::styled(
-                    format!("{}", &accounts_str.chars().take(30).collect::<String>()),
+                    accounts_str.chars().take(30).collect::<String>(),
                     if is_selected {
                         Style::default().fg(Color::Black)
                     } else {
