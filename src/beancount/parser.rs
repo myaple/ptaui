@@ -29,8 +29,7 @@ pub struct Transaction {
     #[allow(dead_code)]
     pub tags: Vec<String>,
     pub postings: Vec<Posting>,
-    /// Line number in file where this transaction starts
-    #[allow(dead_code)]
+    /// 0-based line number in the file where this transaction header starts.
     pub line: usize,
 }
 
@@ -138,6 +137,7 @@ pub fn parse(source: &str) -> Result<Ledger> {
                     }
                 }
                 Some("txn") | Some("*") | Some("!") => {
+                    let start_line = i;
                     let flag = if parts[0] == "!" { '!' } else { '*' };
                     let (payee, narration, tags) = parse_txn_header(parts.get(1).copied().unwrap_or(""));
                     let mut postings = Vec::new();
@@ -166,7 +166,7 @@ pub fn parse(source: &str) -> Result<Ledger> {
                         narration,
                         tags,
                         postings,
-                        line: i,
+                        line: start_line,
                     });
                     continue;
                 }

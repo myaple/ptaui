@@ -122,6 +122,7 @@ fn handle_startup(app: &mut App, key: KeyEvent) -> Result<()> {
 fn handle_modal(app: &mut App, key: KeyEvent) -> Result<()> {
     match app.modal.clone() {
         Some(Modal::AddTransaction) => handle_add_tx(app, key),
+        Some(Modal::EditTransaction) => handle_edit_tx(app, key),
         Some(Modal::AddAccount) => handle_add_account(app, key),
         Some(Modal::AccountFilter) => handle_account_filter(app, key),
         None => Ok(()),
@@ -142,21 +143,44 @@ fn handle_dashboard(app: &mut App, key: KeyEvent) {
     }
 }
 
+/// Approximate visible rows for scroll-clamping in the transaction list.
+const TX_PAGE: usize = 20;
+
 fn handle_transactions(app: &mut App, key: KeyEvent) {
+    let max = app.ledger.transactions.len().saturating_sub(1);
     match key.code {
         KeyCode::Down | KeyCode::Char('j') => {
-            let max = app.ledger.transactions.len().saturating_sub(1);
-            app.tx_scroll = (app.tx_scroll + 1).min(max);
+            if app.tx_selected < max {
+                app.tx_selected += 1;
+                if app.tx_selected >= app.tx_scroll + TX_PAGE {
+                    app.tx_scroll = app.tx_selected.saturating_sub(TX_PAGE - 1);
+                }
+            }
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            app.tx_scroll = app.tx_scroll.saturating_sub(1);
+            if app.tx_selected > 0 {
+                app.tx_selected -= 1;
+                if app.tx_selected < app.tx_scroll {
+                    app.tx_scroll = app.tx_selected;
+                }
+            }
         }
         KeyCode::PageDown => {
-            let max = app.ledger.transactions.len().saturating_sub(1);
-            app.tx_scroll = (app.tx_scroll + 20).min(max);
+            app.tx_selected = (app.tx_selected + TX_PAGE).min(max);
+            if app.tx_selected >= app.tx_scroll + TX_PAGE {
+                app.tx_scroll = app.tx_selected.saturating_sub(TX_PAGE - 1);
+            }
         }
         KeyCode::PageUp => {
-            app.tx_scroll = app.tx_scroll.saturating_sub(20);
+            app.tx_selected = app.tx_selected.saturating_sub(TX_PAGE);
+            if app.tx_selected < app.tx_scroll {
+                app.tx_scroll = app.tx_selected;
+            }
+        }
+        KeyCode::Char('e') => {
+            if !app.ledger.transactions.is_empty() {
+                app.open_edit_tx_modal();
+            }
         }
         _ => {}
     }
@@ -212,6 +236,85 @@ fn handle_add_tx(app: &mut App, key: KeyEvent) -> Result<()> {
         KeyCode::Enter => {
             if form.focused == AddTxField::Confirm {
                 match app.commit_transaction() {
+                    Ok(()) => app.close_modal(),
+                    Err(e) => {
+                        if let Some(form) = app.add_tx_form.as_mut() {
+                            form.error = Some(e.to_string());
+                        }
+                    }
+                }
+            } else {
+                let next = form.focused.next();
+                form.focused = next;
+            }
+        }
+        KeyCode::Backspace => {
+            if form.focused != AddTxField::Confirm {
+                let field = form.current_field_mut();
+                field.pop();
+            }
+        }
+        KeyCode::Char(c) => {
+            if form.focused != AddTxField::Confirm {
+                let field = form.current_field_mut();
+                field.push(c);
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+// ── Modal: Edit Transaction ───────────────────────────────────────────────────
+
+fn handle_edit_tx(app: &mut App, key: KeyEvent) -> Result<()> {
+    let form = match app.add_tx_form.as_mut() {
+        Some(f) => f,
+        None => return Ok(()),
+    };
+
+    match key.code {
+        KeyCode::Esc => {
+            app.close_modal();
+            return Ok(());
+        }
+        KeyCode::Tab => {
+            if matches!(
+                form.focused,
+                AddTxField::Payee | AddTxField::Category | AddTxField::Account
+            ) {
+                let suggestions = form.suggestions_for_current();
+                if !suggestions.is_empty() {
+                    let current = match form.focused {
+                        AddTxField::Payee    => &form.payee,
+                        AddTxField::Category => &form.category,
+                        AddTxField::Account  => &form.account,
+                        _ => unreachable!(),
+                    };
+                    if !suggestions.contains(current) {
+                        form.autocomplete();
+                        return Ok(());
+                    }
+                }
+            }
+            let next = form.focused.next();
+            form.focused = next;
+        }
+        KeyCode::BackTab => {
+            let prev = form.focused.prev();
+            form.focused = prev;
+        }
+        KeyCode::Down => {
+            let next = form.focused.next();
+            form.focused = next;
+        }
+        KeyCode::Up => {
+            let prev = form.focused.prev();
+            form.focused = prev;
+        }
+        KeyCode::Enter => {
+            if form.focused == AddTxField::Confirm {
+                match app.commit_edit_transaction() {
                     Ok(()) => app.close_modal(),
                     Err(e) => {
                         if let Some(form) = app.add_tx_form.as_mut() {

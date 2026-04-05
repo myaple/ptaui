@@ -23,18 +23,22 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
     let visible_height = area.height.saturating_sub(2) as usize;
     let scroll = app.tx_scroll.min(sorted.len().saturating_sub(1));
+    let selected = app.tx_selected.min(sorted.len().saturating_sub(1));
 
     let items: Vec<ListItem> = sorted
         .iter()
+        .enumerate()
         .skip(scroll)
         .take(visible_height)
-        .map(|txn| {
+        .map(|(abs_idx, txn)| {
+            let is_selected = abs_idx == selected;
+
             let payee_narration = match &txn.payee {
                 Some(p) => format!("{} — {}", p, txn.narration),
                 None => txn.narration.clone(),
             };
 
-            // Find the main debit posting (first posting with positive amount in Expenses/Assets)
+            // Find the main debit posting (first posting with positive amount)
             let amount_str = txn
                 .postings
                 .iter()
@@ -60,42 +64,65 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 .collect();
             let accounts_str = accounts.join(" / ");
 
-            let flag_style = if txn.flag == '!' {
+            let flag_style = if is_selected {
+                Style::default().fg(Color::Black)
+            } else if txn.flag == '!' {
                 Style::default().fg(Color::Yellow)
             } else {
                 Style::default().fg(Color::Green)
             };
 
-            Line::from(vec![
+            let row = Line::from(vec![
                 Span::styled(
                     format!(" {} ", txn.date.format("%Y-%m-%d")),
-                    Style::default().fg(Color::Cyan),
+                    if is_selected {
+                        Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Cyan)
+                    },
                 ),
                 Span::raw(" "),
                 Span::styled(txn.flag.to_string(), flag_style),
                 Span::raw(" "),
                 Span::styled(
                     format!("{:<40}", &payee_narration.chars().take(40).collect::<String>()),
-                    Style::default().fg(Color::White),
+                    if is_selected {
+                        Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::White)
+                    },
                 ),
                 Span::styled(
                     format!("{:>14}", amount_str),
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
+                    if is_selected {
+                        Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
+                    },
                 ),
                 Span::raw("  "),
                 Span::styled(
                     format!("{}", &accounts_str.chars().take(30).collect::<String>()),
-                    Style::default().fg(Color::DarkGray),
+                    if is_selected {
+                        Style::default().fg(Color::Black)
+                    } else {
+                        Style::default().fg(Color::DarkGray)
+                    },
                 ),
-            ])
+            ]);
+
+            if is_selected {
+                ListItem::new(row).style(Style::default().bg(Color::Cyan))
+            } else {
+                ListItem::new(row)
+            }
         })
-        .map(ListItem::new)
         .collect();
 
     let title = format!(
-        " Transactions ({}) — ↑↓ scroll ",
+        " Transactions ({}) — ↑↓ navigate  e edit ",
         txns.len()
     );
     let list = List::new(items)

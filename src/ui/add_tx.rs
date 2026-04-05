@@ -9,6 +9,14 @@ use ratatui::{
 };
 
 pub fn render_modal(f: &mut Frame, app: &App) {
+    render_modal_with_title(f, app, " Add Transaction ");
+}
+
+pub fn render_edit_modal(f: &mut Frame, app: &App) {
+    render_modal_with_title(f, app, " Edit Transaction ");
+}
+
+fn render_modal_with_title(f: &mut Frame, app: &App, title: &str) {
     if app.add_tx_form.is_none() {
         return;
     }
@@ -23,7 +31,7 @@ pub fn render_modal(f: &mut Frame, app: &App) {
         .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
         .split(area);
 
-    render_form(f, app, chunks[0]);
+    render_form(f, app, chunks[0], title);
     render_suggestions_and_help(f, app, chunks[1]);
 }
 
@@ -43,7 +51,7 @@ fn field_style(focused: bool) -> Style {
     }
 }
 
-fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect, title: &str) {
     let form = app.add_tx_form.as_ref().unwrap();
 
     let fields: &[(AddTxField, &str, &str)] = &[
@@ -93,7 +101,7 @@ fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
 
     f.render_widget(
         Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title(" Add Transaction ")),
+            .block(Block::default().borders(Borders::ALL).title(title)),
         area,
     );
 }

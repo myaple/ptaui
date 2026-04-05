@@ -78,6 +78,51 @@ pub fn append_account_open(path: &Path, date: NaiveDate, account: &str, currenci
     Ok(())
 }
 
+/// Replace an existing transaction whose header is at `start_line` (0-based)
+/// with `new_txn`. All indented posting lines after the header are considered
+/// part of the old transaction and will be replaced.
+pub fn replace_transaction(path: &Path, start_line: usize, new_txn: &NewTransaction) -> Result<()> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("Reading {}", path.display()))?;
+    let file_lines: Vec<&str> = content.lines().collect();
+
+    if start_line >= file_lines.len() {
+        anyhow::bail!("Transaction start line {} is out of range (file has {} lines)", start_line, file_lines.len());
+    }
+
+    // Find the first line after the transaction block (header + indented postings).
+    let mut end_line = start_line + 1;
+    while end_line < file_lines.len() {
+        let l = file_lines[end_line];
+        if l.starts_with("  ") || l.starts_with('\t') {
+            end_line += 1;
+        } else {
+            break;
+        }
+    }
+
+    // Format the replacement transaction (ends with '\n', strip for joining).
+    let new_text = format_transaction(new_txn);
+    let new_lines: Vec<&str> = new_text.trim_end_matches('\n').lines().collect();
+
+    // Reconstruct: before + new transaction + after.
+    let mut result_lines: Vec<&str> = Vec::with_capacity(
+        start_line + new_lines.len() + (file_lines.len() - end_line),
+    );
+    result_lines.extend_from_slice(&file_lines[..start_line]);
+    result_lines.extend_from_slice(&new_lines);
+    result_lines.extend_from_slice(&file_lines[end_line..]);
+
+    let mut result = result_lines.join("\n");
+    if content.ends_with('\n') {
+        result.push('\n');
+    }
+
+    std::fs::write(path, &result)
+        .with_context(|| format!("Writing updated transaction to {}", path.display()))?;
+    Ok(())
+}
+
 pub fn append_transaction(path: &Path, txn: &NewTransaction) -> Result<()> {
     let formatted = format_transaction(txn);
     // Ensure file ends with a newline before appending
