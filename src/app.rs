@@ -1,6 +1,6 @@
 use crate::beancount::parser::Ledger;
 use crate::beancount::validator::{bean_check, CheckResult};
-use crate::beancount::writer::{append_account_open, append_transaction, NewPosting, NewTransaction};
+use crate::beancount::writer::{append_account_open, append_transaction, replace_transaction, NewPosting, NewTransaction};
 use crate::config::Config;
 use crate::git;
 use anyhow::{Context, Result};
@@ -25,6 +25,7 @@ pub enum Screen {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Modal {
     AddTransaction,
+    EditTransaction,
     AddAccount,
     AccountFilter,
 }
@@ -343,7 +344,12 @@ pub struct App {
     /// Currently open modal overlay (if any). Captures all key input.
     pub modal: Option<Modal>,
     pub startup: StartupState,
+    /// Scroll offset for the transaction list (index of first visible item in sorted order).
     pub tx_scroll: usize,
+    /// Index of the currently selected transaction in the sorted (reverse-chrono) list.
+    pub tx_selected: usize,
+    /// When editing a transaction, the 0-based start line of that transaction in the file.
+    pub edit_tx_orig_line: Option<usize>,
     pub dashboard_scroll: usize,
     pub add_tx_form: Option<AddTxForm>,
     pub add_account_form: Option<AddAccountForm>,
@@ -373,6 +379,8 @@ impl App {
             modal: None,
             startup,
             tx_scroll: 0,
+            tx_selected: 0,
+            edit_tx_orig_line: None,
             dashboard_scroll: 0,
             add_tx_form: None,
             add_account_form: None,
@@ -538,6 +546,9 @@ impl App {
                 // Ensure the list is up-to-date; preserve existing selections.
                 self.rebuild_account_filter();
             }
+            Modal::EditTransaction => {
+                // Opened via open_edit_tx_modal() which sets up form state directly.
+            }
         }
         self.modal = Some(modal);
         // Don't clear status_message — it stays visible in the background
@@ -548,7 +559,72 @@ impl App {
         self.modal = None;
         self.add_tx_form = None;
         self.add_account_form = None;
+        self.edit_tx_orig_line = None;
         // account_filter state is intentionally kept across close so selections persist.
+    }
+
+    /// Open the edit-transaction modal pre-populated with the currently selected transaction.
+    pub fn open_edit_tx_modal(&mut self) {
+        if self.ledger.transactions.is_empty() {
+            return;
+        }
+
+        // Build the same sorted order used by the transactions UI (reverse chrono).
+        let mut sorted: Vec<&crate::beancount::parser::Transaction> =
+            self.ledger.transactions.iter().collect();
+        sorted.sort_by(|a, b| b.date.cmp(&a.date));
+
+        let selected = self.tx_selected.min(sorted.len().saturating_sub(1));
+        let txn = sorted[selected];
+
+        // Map postings to the form's category / account fields.
+        // Category = first Expenses:* or Income:* posting.
+        // Account  = first Assets:* or Liabilities:* posting.
+        let category_posting = txn
+            .postings
+            .iter()
+            .find(|p| p.account.starts_with("Expenses:") || p.account.starts_with("Income:"))
+            .or_else(|| txn.postings.first());
+
+        let account_posting = txn
+            .postings
+            .iter()
+            .find(|p| {
+                p.account.starts_with("Assets:")
+                    || p.account.starts_with("Liabilities:")
+                    || p.account.starts_with("Equity:")
+            })
+            .or_else(|| txn.postings.get(1));
+
+        let (category, amount_str, currency) = if let Some(p) = category_posting {
+            let amt = p.amount.map(|a| a.abs().to_string()).unwrap_or_default();
+            let cur = p
+                .currency
+                .clone()
+                .unwrap_or_else(|| self.config.currency.clone());
+            (p.account.clone(), amt, cur)
+        } else {
+            (String::new(), String::new(), self.config.currency.clone())
+        };
+
+        let account = account_posting
+            .map(|p| p.account.clone())
+            .unwrap_or_default();
+
+        let accounts = self.account_names();
+        let payees = self.known_payees();
+        let mut form = AddTxForm::new(&currency, &accounts, &payees);
+        form.date = txn.date.format("%Y-%m-%d").to_string();
+        form.payee = txn.payee.clone().unwrap_or_default();
+        form.narration = txn.narration.clone();
+        form.category = category;
+        form.account = account;
+        form.amount = amount_str;
+        form.currency = currency;
+
+        self.edit_tx_orig_line = Some(txn.line);
+        self.add_tx_form = Some(form);
+        self.modal = Some(Modal::EditTransaction);
     }
 
     /// Commit the current add_account_form to the beancount file.
@@ -673,6 +749,97 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Replace the transaction at `edit_tx_orig_line` with the edited form data.
+    pub fn commit_edit_transaction(&mut self) -> Result<()> {
+        let orig_line = self
+            .edit_tx_orig_line
+            .ok_or_else(|| anyhow::anyhow!("No transaction being edited"))?;
+
+        let form = self.add_tx_form.as_ref().unwrap();
+
+        let date = chrono::NaiveDate::parse_from_str(&form.date, "%Y-%m-%d")
+            .map_err(|_| anyhow::anyhow!("Invalid date format. Use YYYY-MM-DD"))?;
+        let narration = form.narration.trim().to_string();
+        if narration.is_empty() {
+            anyhow::bail!("Narration cannot be empty");
+        }
+        if form.category.trim().is_empty() {
+            anyhow::bail!("Category cannot be empty");
+        }
+        if form.account.trim().is_empty() {
+            anyhow::bail!("Account cannot be empty");
+        }
+        let amount = Decimal::from_str(form.amount.trim())
+            .map_err(|_| anyhow::anyhow!("Invalid amount"))?;
+        let currency = form.currency.trim().to_string();
+        if currency.is_empty() {
+            anyhow::bail!("Currency cannot be empty");
+        }
+        let payee = if form.payee.trim().is_empty() {
+            None
+        } else {
+            Some(form.payee.trim().to_string())
+        };
+
+        let narration_clone = narration.clone();
+        let category = form.category.trim().to_string();
+        let account = form.account.trim().to_string();
+
+        let updated_txn = NewTransaction {
+            date,
+            flag: '*',
+            payee,
+            narration,
+            postings: vec![
+                NewPosting {
+                    account: category,
+                    amount: Some(amount),
+                    currency: Some(currency.clone()),
+                },
+                NewPosting {
+                    account,
+                    amount: Some(-amount),
+                    currency: Some(currency),
+                },
+            ],
+        };
+
+        let path = self.config.resolved_beancount_file();
+        replace_transaction(&path, orig_line, &updated_txn)?;
+        self.edit_tx_orig_line = None;
+        self.reload_ledger()?;
+
+        let mut status_parts: Vec<String> = vec!["Transaction updated.".to_string()];
+
+        if self.config.auto_bean_check {
+            match bean_check(&path) {
+                CheckResult::Ok => {
+                    status_parts.push("bean-check: OK".to_string());
+                    self.check_errors.clear();
+                }
+                CheckResult::Errors(errs) => {
+                    status_parts.push(format!("bean-check: {} error(s)", errs.len()));
+                    self.check_errors = errs;
+                }
+                CheckResult::NotInstalled => {
+                    status_parts.push("(bean-check not installed)".to_string());
+                    self.check_errors.clear();
+                }
+            }
+        }
+
+        if git::is_git_repo(path.parent().unwrap_or(&path)) {
+            let msg = format!("txn: edit {} {}", date.format("%Y-%m-%d"), narration_clone);
+            match git::commit_file(&path, &msg) {
+                Ok(()) => status_parts.push("git: committed".to_string()),
+                Err(e) => status_parts.push(format!("git: {}", e)),
+            }
+        }
+
+        self.status_message = Some(status_parts.join("  |  "));
+        Ok(())
     }
 
     /// Commit the current add_tx_form to the beancount file.

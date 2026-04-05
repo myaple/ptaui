@@ -45,6 +45,7 @@ pub fn render(f: &mut Frame, app: &App) {
     // Modal overlays — rendered after the background so they appear on top
     match &app.modal {
         Some(Modal::AddTransaction) => add_tx::render_modal(f, app),
+        Some(Modal::EditTransaction) => add_tx::render_edit_modal(f, app),
         Some(Modal::AddAccount) => add_account::render_modal(f, app),
         Some(Modal::AccountFilter) => account_filter::render_modal(f, app),
         None => {}
@@ -83,10 +84,17 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
         s.clone()
     } else {
         let file = app.config.resolved_beancount_file();
-        format!(
-            " {} | q quit  1-3 screens  a add  r reload",
-            file.display()
-        )
+        if app.screen == Screen::Transactions && !app.ledger.transactions.is_empty() {
+            format!(
+                " {} | q quit  1-3 screens  a add  e edit  r reload",
+                file.display()
+            )
+        } else {
+            format!(
+                " {} | q quit  1-3 screens  a add  r reload",
+                file.display()
+            )
+        }
     };
 
     let style = if !app.check_errors.is_empty() {
