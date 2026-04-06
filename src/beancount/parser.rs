@@ -90,10 +90,14 @@ impl Ledger {
                     let acct = &posting.account;
                     if acct.starts_with("Income") {
                         // Income postings are negative in beancount (credit)
-                        let entry = map.entry(key.clone()).or_insert((Decimal::ZERO, Decimal::ZERO));
+                        let entry = map
+                            .entry(key.clone())
+                            .or_insert((Decimal::ZERO, Decimal::ZERO));
                         entry.0 += -amount;
                     } else if acct.starts_with("Expenses") {
-                        let entry = map.entry(key.clone()).or_insert((Decimal::ZERO, Decimal::ZERO));
+                        let entry = map
+                            .entry(key.clone())
+                            .or_insert((Decimal::ZERO, Decimal::ZERO));
                         entry.1 += amount;
                     }
                 }
@@ -194,7 +198,11 @@ pub fn parse(source: &str) -> Result<Ledger> {
         let line = lines[i].trim_end();
 
         // Skip blank lines and comments
-        if line.is_empty() || line.starts_with(';') || line.starts_with("//") || line.starts_with('#') {
+        if line.is_empty()
+            || line.starts_with(';')
+            || line.starts_with("//")
+            || line.starts_with('#')
+        {
             i += 1;
             continue;
         }
@@ -220,7 +228,8 @@ pub fn parse(source: &str) -> Result<Ledger> {
                 Some("txn") | Some("*") | Some("!") => {
                     let start_line = i;
                     let flag = if parts[0] == "!" { '!' } else { '*' };
-                    let (payee, narration, tags) = parse_txn_header(parts.get(1).copied().unwrap_or(""));
+                    let (payee, narration, tags) =
+                        parse_txn_header(parts.get(1).copied().unwrap_or(""));
                     let mut postings = Vec::new();
                     i += 1;
                     while i < lines.len() {
@@ -323,7 +332,12 @@ fn parse_posting(line: &str) -> Option<Posting> {
     let account = tokens.first()?.to_string();
 
     // Must start with a capital letter (beancount account type)
-    if !account.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+    if !account
+        .chars()
+        .next()
+        .map(|c| c.is_uppercase())
+        .unwrap_or(false)
+    {
         return None;
     }
 

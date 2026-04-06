@@ -37,7 +37,9 @@ fn render_form(f: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(Span::styled(
         "  Account Type",
         if type_focused {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::DarkGray)
         },
@@ -73,7 +75,9 @@ fn render_form(f: &mut Frame, app: &App, area: Rect) {
         Span::styled(
             "  Sub-name   : ",
             if sub_focused {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             },
@@ -102,7 +106,9 @@ fn render_form(f: &mut Frame, app: &App, area: Rect) {
         Span::styled(
             "  Currencies : ",
             if cur_focused {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             },
@@ -125,7 +131,9 @@ fn render_form(f: &mut Frame, app: &App, area: Rect) {
         Span::styled(
             "  Open date  : ",
             if date_focused {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             },
@@ -144,7 +152,9 @@ fn render_form(f: &mut Frame, app: &App, area: Rect) {
         Span::styled(
             "  Opening bal: ",
             if bal_focused {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             },
@@ -187,8 +197,11 @@ fn render_form(f: &mut Frame, app: &App, area: Rect) {
         )));
     }
 
-    let para = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(" Add Account "));
+    let para = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Add Account "),
+    );
     f.render_widget(para, area);
 }
 
@@ -197,45 +210,101 @@ fn render_help(f: &mut Frame, _app: &App, area: Rect) {
         Line::from(""),
         Line::from(Span::styled(
             "  Navigation",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::styled("  Tab / ↓   Next field", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  Shift+Tab Previous field", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  ← / →     Change account type", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  Enter     Confirm / Submit", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  Esc       Cancel", Style::default().fg(Color::White))),
+        Line::from(Span::styled(
+            "  Tab / ↓   Next field",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "  Shift+Tab Previous field",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "  ← / →     Change account type",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "  Enter     Confirm / Submit",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "  Esc       Cancel",
+            Style::default().fg(Color::White),
+        )),
         Line::from(""),
         Line::from(Span::styled(
             "  Opening Balance",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::styled("  Sets the account's starting", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  value via a transaction from", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  Equity:OpeningBalances.", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  Leave blank to skip.", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(
+            "  Sets the account's starting",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "  value via a transaction from",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "  Equity:OpeningBalances.",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "  Leave blank to skip.",
+            Style::default().fg(Color::DarkGray),
+        )),
         Line::from(""),
         Line::from(Span::styled(
             "  Account naming",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::styled("  Each segment: CapitalFirst", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  Use : for sub-accounts", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(
+            "  Each segment: CapitalFirst",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "  Use : for sub-accounts",
+            Style::default().fg(Color::DarkGray),
+        )),
         Line::from(""),
         Line::from(Span::styled(
             "  Examples",
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::styled("  Checking", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  → Assets:Checking", Style::default().fg(Color::White))),
+        Line::from(Span::styled(
+            "  Checking",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "  → Assets:Checking",
+            Style::default().fg(Color::White),
+        )),
         Line::from(""),
-        Line::from(Span::styled("  Food:Restaurants", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  → Expenses:Food:Restaurants", Style::default().fg(Color::White))),
+        Line::from(Span::styled(
+            "  Food:Restaurants",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "  → Expenses:Food:Restaurants",
+            Style::default().fg(Color::White),
+        )),
         Line::from(""),
         Line::from(Span::styled("  Visa", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  → Liabilities:Visa", Style::default().fg(Color::White))),
+        Line::from(Span::styled(
+            "  → Liabilities:Visa",
+            Style::default().fg(Color::White),
+        )),
     ];
 
-    let para = Paragraph::new(help_lines)
-        .block(Block::default().borders(Borders::ALL).title(" Help "));
+    let para =
+        Paragraph::new(help_lines).block(Block::default().borders(Borders::ALL).title(" Help "));
     f.render_widget(para, area);
 }

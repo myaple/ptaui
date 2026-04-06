@@ -22,10 +22,7 @@ pub fn render_modal(f: &mut Frame, app: &App) {
     // Split vertically: list area on top, help bar on bottom
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(0),
-            Constraint::Length(3),
-        ])
+        .constraints([Constraint::Min(0), Constraint::Length(3)])
         .split(area);
 
     render_list(f, app, chunks[0]);
@@ -41,10 +38,7 @@ fn render_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let checked_count = filter.iter().filter(|(_, c)| *c).count();
     let total = filter.len();
 
-    let title = format!(
-        " Account Filter  [{}/{}] ",
-        checked_count, total
-    );
+    let title = format!(" Account Filter  [{}/{}] ", checked_count, total);
 
     let visible_end = (scroll + LIST_HEIGHT).min(total);
     let visible = &filter[scroll..visible_end];
@@ -76,7 +70,14 @@ fn render_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
 
             ListItem::new(Line::from(vec![
                 Span::raw(prefix),
-                Span::styled(checkbox, if is_cursor { Style::default().fg(Color::Black).bg(Color::Cyan) } else { checkbox_style }),
+                Span::styled(
+                    checkbox,
+                    if is_cursor {
+                        Style::default().fg(Color::Black).bg(Color::Cyan)
+                    } else {
+                        checkbox_style
+                    },
+                ),
                 Span::styled(format!(" {}", name), name_style),
             ]))
         })
@@ -84,12 +85,7 @@ fn render_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
 
     // Show scroll indicators in the title if list overflows
     let scroll_hint = if total > LIST_HEIGHT {
-        format!(
-            "  ↑↓ {}-{}/{}",
-            scroll + 1,
-            visible_end,
-            total
-        )
+        format!("  ↑↓ {}-{}/{}", scroll + 1, visible_end, total)
     } else {
         String::new()
     };
@@ -99,7 +95,9 @@ fn render_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         .border_style(Style::default().fg(Color::Cyan))
         .title(Span::styled(
             format!("{}{}", title, scroll_hint),
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         ));
 
     if filter.is_empty() {
@@ -116,18 +114,46 @@ fn render_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
 
 fn render_help(f: &mut Frame, area: ratatui::layout::Rect) {
     let spans = vec![
-        Span::styled(" Space", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " Space",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" toggle  "),
-        Span::styled("a", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "a",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" check all  "),
-        Span::styled("u", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "u",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" uncheck all  "),
-        Span::styled("j/k ↑↓", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "j/k ↑↓",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" navigate  "),
-        Span::styled("Esc/Enter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Esc/Enter",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" close"),
     ];
-    let para = Paragraph::new(Line::from(spans))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+    let para = Paragraph::new(Line::from(spans)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
     f.render_widget(para, area);
 }

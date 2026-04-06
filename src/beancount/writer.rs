@@ -54,7 +54,12 @@ pub fn format_transaction(txn: &NewTransaction) -> String {
 }
 
 /// Append an `open` directive for a new account.
-pub fn append_account_open(path: &Path, date: NaiveDate, account: &str, currencies: &[String]) -> Result<()> {
+pub fn append_account_open(
+    path: &Path,
+    date: NaiveDate,
+    account: &str,
+    currencies: &[String],
+) -> Result<()> {
     let cur_str = if currencies.is_empty() {
         String::new()
     } else {
@@ -63,7 +68,11 @@ pub fn append_account_open(path: &Path, date: NaiveDate, account: &str, currenci
     let line = format!("{} open {}{}\n", date.format("%Y-%m-%d"), account, cur_str);
 
     let existing = std::fs::read_to_string(path).unwrap_or_default();
-    let separator = if existing.ends_with('\n') || existing.is_empty() { "\n" } else { "\n\n" };
+    let separator = if existing.ends_with('\n') || existing.is_empty() {
+        "\n"
+    } else {
+        "\n\n"
+    };
     let content = format!("{}{}", separator, line);
 
     use std::fs::OpenOptions;
@@ -82,12 +91,16 @@ pub fn append_account_open(path: &Path, date: NaiveDate, account: &str, currenci
 /// with `new_txn`. All indented posting lines after the header are considered
 /// part of the old transaction and will be replaced.
 pub fn replace_transaction(path: &Path, start_line: usize, new_txn: &NewTransaction) -> Result<()> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Reading {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("Reading {}", path.display()))?;
     let file_lines: Vec<&str> = content.lines().collect();
 
     if start_line >= file_lines.len() {
-        anyhow::bail!("Transaction start line {} is out of range (file has {} lines)", start_line, file_lines.len());
+        anyhow::bail!(
+            "Transaction start line {} is out of range (file has {} lines)",
+            start_line,
+            file_lines.len()
+        );
     }
 
     // Find the first line after the transaction block (header + indented postings).
@@ -106,9 +119,8 @@ pub fn replace_transaction(path: &Path, start_line: usize, new_txn: &NewTransact
     let new_lines: Vec<&str> = new_text.trim_end_matches('\n').lines().collect();
 
     // Reconstruct: before + new transaction + after.
-    let mut result_lines: Vec<&str> = Vec::with_capacity(
-        start_line + new_lines.len() + (file_lines.len() - end_line),
-    );
+    let mut result_lines: Vec<&str> =
+        Vec::with_capacity(start_line + new_lines.len() + (file_lines.len() - end_line));
     result_lines.extend_from_slice(&file_lines[..start_line]);
     result_lines.extend_from_slice(&new_lines);
     result_lines.extend_from_slice(&file_lines[end_line..]);
@@ -128,12 +140,16 @@ pub fn replace_transaction(path: &Path, start_line: usize, new_txn: &NewTransact
 /// A blank line immediately before the transaction is also removed so the
 /// file doesn't accumulate extra blank lines.
 pub fn delete_transaction(path: &Path, start_line: usize) -> Result<()> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Reading {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("Reading {}", path.display()))?;
     let file_lines: Vec<&str> = content.lines().collect();
 
     if start_line >= file_lines.len() {
-        anyhow::bail!("Transaction start line {} is out of range (file has {} lines)", start_line, file_lines.len());
+        anyhow::bail!(
+            "Transaction start line {} is out of range (file has {} lines)",
+            start_line,
+            file_lines.len()
+        );
     }
 
     // Find the first line after the transaction block (header + indented postings).
@@ -171,8 +187,8 @@ pub fn delete_transaction(path: &Path, start_line: usize) -> Result<()> {
 /// Set or clear the `#reconciled` tag on the transaction header at `start_line` (0-based).
 /// Returns the new reconciled state (true = reconciled, false = unreconciled).
 pub fn set_reconcile_tag(path: &Path, start_line: usize, reconciled: bool) -> Result<bool> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Reading {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("Reading {}", path.display()))?;
     let mut file_lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
 
     if start_line >= file_lines.len() {
@@ -213,8 +229,7 @@ pub fn set_reconcile_tag(path: &Path, start_line: usize, reconciled: bool) -> Re
 pub fn append_transaction(path: &Path, txn: &NewTransaction) -> Result<()> {
     let formatted = format_transaction(txn);
     // Ensure file ends with a newline before appending
-    let existing = std::fs::read_to_string(path)
-        .unwrap_or_default();
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
     let separator = if existing.ends_with('\n') || existing.is_empty() {
         "\n"
     } else {

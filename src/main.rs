@@ -43,7 +43,9 @@ fn main() -> Result<()> {
             } else if git::is_git_repo(dir) {
                 GitStatus::Controlled
             } else {
-                GitStatus::Uncontrolled { dir: dir.to_path_buf() }
+                GitStatus::Uncontrolled {
+                    dir: dir.to_path_buf(),
+                }
             }
         } else {
             GitStatus::NoFile
@@ -82,10 +84,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_app<B: ratatui::backend::Backend>(
-    terminal: &mut Terminal<B>,
-    app: &mut App,
-) -> Result<()> {
+fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     loop {
         terminal.draw(|f| ui::render(f, app))?;
 

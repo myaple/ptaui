@@ -49,14 +49,15 @@ fn render_tx_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         app.config.currency,
     );
 
-    let header = ListItem::new(Line::from(vec![
-        Span::styled(
-            format!("   {:<12}  {:<35}  {:>12}", "Date", "Payee / Narration", "Amount"),
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+    let header = ListItem::new(Line::from(vec![Span::styled(
+        format!(
+            "   {:<12}  {:<35}  {:>12}",
+            "Date", "Payee / Narration", "Amount"
         ),
-    ]));
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+    )]));
 
     let mut items = vec![header];
 
@@ -109,12 +110,18 @@ fn render_tx_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
             };
 
             let row_style = if is_cursor {
-                Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
             let amt_style = if is_cursor {
-                Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(amount_color)
             };
@@ -143,7 +150,9 @@ fn render_tx_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         .border_style(Style::default().fg(Color::Cyan))
         .title(Span::styled(
             format!("{}{}", title, scroll_hint),
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         ));
 
     f.render_widget(List::new(items).block(block), area);
@@ -151,12 +160,25 @@ fn render_tx_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
 
 fn render_help(f: &mut Frame, area: ratatui::layout::Rect) {
     let spans = vec![
-        Span::styled(" j/k ↑↓", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " j/k ↑↓",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" navigate  "),
-        Span::styled("Esc/Enter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Esc/Enter",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" close"),
     ];
-    let para = Paragraph::new(Line::from(spans))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+    let para = Paragraph::new(Line::from(spans)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
     f.render_widget(para, area);
 }

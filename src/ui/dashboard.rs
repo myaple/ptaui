@@ -40,13 +40,18 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
-                    format!("  Expected: {}", app.config.resolved_beancount_file().display()),
+                    format!(
+                        "  Expected: {}",
+                        app.config.resolved_beancount_file().display()
+                    ),
                     Style::default().fg(Color::Yellow),
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
                     "  Press c to create this file with git version control.",
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
@@ -63,7 +68,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 Line::from(""),
                 Line::from(Span::styled(
                     "  No accounts declared in this beancount file.",
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
@@ -81,8 +88,8 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 )),
             ]
         };
-        let para = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title(" Accounts "));
+        let para =
+            Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(" Accounts "));
         f.render_widget(para, area);
         return;
     }
@@ -103,7 +110,10 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             let short = name.trim_start_matches(&format!("{}:", group));
             let indent = "  ";
             let line = Line::from(vec![
-                Span::styled(format!("{}  {:<45}", indent, short), Style::default().fg(Color::White)),
+                Span::styled(
+                    format!("{}  {:<45}", indent, short),
+                    Style::default().fg(Color::White),
+                ),
                 Span::styled(
                     format!("{:>20}", bal),
                     Style::default()
@@ -119,7 +129,12 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     // Net worth summary
     let net = compute_net(&balances, &app.config.currency);
     items.push(ListItem::new(Line::from(vec![
-        Span::styled("  Net Worth", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "  Net Worth",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(
             format!("{:>53} {}", fmt_decimal(net), app.config.currency),
             Style::default()
