@@ -1057,6 +1057,16 @@ fn handle_csv_column_mapping(app: &mut App, key: KeyEvent) -> Result<()> {
                     state.amount_col - 1
                 };
             }
+            CsvMappingField::Debit => {
+                if let Some(col) = state.debit_col {
+                    state.debit_col = Some(if col == 0 { num_cols - 1 } else { col - 1 });
+                }
+            }
+            CsvMappingField::Credit => {
+                if let Some(col) = state.credit_col {
+                    state.credit_col = Some(if col == 0 { num_cols - 1 } else { col - 1 });
+                }
+            }
             CsvMappingField::DateFormat | CsvMappingField::Negate => {}
         },
         KeyCode::Right => match state.mapping_focused {
@@ -1069,10 +1079,33 @@ fn handle_csv_column_mapping(app: &mut App, key: KeyEvent) -> Result<()> {
             CsvMappingField::Amount => {
                 state.amount_col = (state.amount_col + 1) % num_cols;
             }
+            CsvMappingField::Debit => {
+                if let Some(col) = state.debit_col {
+                    state.debit_col = Some((col + 1) % num_cols);
+                }
+            }
+            CsvMappingField::Credit => {
+                if let Some(col) = state.credit_col {
+                    state.credit_col = Some((col + 1) % num_cols);
+                }
+            }
             CsvMappingField::DateFormat | CsvMappingField::Negate => {}
         },
         KeyCode::Char(' ') if state.mapping_focused == CsvMappingField::Negate => {
             state.negate_amounts = !state.negate_amounts;
+        }
+        KeyCode::Char(' ') if state.mapping_focused == CsvMappingField::Debit => {
+            if state.debit_col.is_some() {
+                state.debit_col = None;
+                state.credit_col = None; // disable credit too when debit is disabled
+            } else {
+                state.debit_col = Some(0);
+            }
+        }
+        KeyCode::Char(' ') if state.mapping_focused == CsvMappingField::Credit => {
+            if state.debit_col.is_some() {
+                state.credit_col = if state.credit_col.is_some() { None } else { Some(0) };
+            }
         }
         KeyCode::Backspace if state.mapping_focused == CsvMappingField::DateFormat => {
             state.date_format.pop();
@@ -1086,8 +1119,8 @@ fn handle_csv_column_mapping(app: &mut App, key: KeyEvent) -> Result<()> {
                 date_col: state.date_col,
                 payee_col: state.payee_col,
                 amount_col: state.amount_col,
-                debit_col: None,
-                credit_col: None,
+                debit_col: state.debit_col,
+                credit_col: state.credit_col,
             };
             match crate::beancount::csv::parse_rows(
                 &state.raw_rows,
