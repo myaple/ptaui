@@ -158,7 +158,14 @@ fn handle_dashboard(app: &mut App, key: KeyEvent) {
 const TX_PAGE: usize = 20;
 
 fn handle_transactions(app: &mut App, key: KeyEvent) {
-    let max = app.ledger.transactions.len().saturating_sub(1);
+    let filter = app.active_tx_account_filter();
+    let max = app.ledger.transactions.iter()
+        .filter(|txn| match &filter {
+            None => true,
+            Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+        })
+        .count()
+        .saturating_sub(1);
     match key.code {
         KeyCode::Down | KeyCode::Char('j') => {
             if app.tx_selected < max {
