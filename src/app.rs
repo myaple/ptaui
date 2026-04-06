@@ -495,6 +495,10 @@ pub struct App {
     pub tx_account_filter_scroll: usize,
     /// True = "Yes" selected in the delete-transaction confirmation modal.
     pub delete_tx_confirm: bool,
+    /// Whether the transaction list is in reconcile mode.
+    pub reconcile_mode: bool,
+    /// Set of transaction file-line numbers (txn.line) currently multi-selected in reconcile mode.
+    pub reconcile_selected: std::collections::HashSet<usize>,
 }
 
 impl App {
@@ -534,6 +538,8 @@ impl App {
             tx_account_filter_cursor: 0,
             tx_account_filter_scroll: 0,
             delete_tx_confirm: true,
+            reconcile_mode: false,
+            reconcile_selected: std::collections::HashSet::new(),
         };
         app.rebuild_account_filter();
         app.rebuild_tx_account_filter();
@@ -1273,6 +1279,68 @@ impl App {
 
         self.status_message = Some(status_parts.join("  |  "));
 
+        Ok(())
+    }
+
+    /// Mark or unmark transactions as reconciled.
+    ///
+    /// `force`: `true` = reconcile, `false` = unreconcile.
+    ///
+    /// Operates on `reconcile_selected` if non-empty, otherwise on the
+    /// currently highlighted transaction. After writing, reloads the ledger
+    /// and commits to git.
+    pub fn commit_reconcile_transactions(&mut self, force: bool) -> Result<()> {
+        if self.ledger.transactions.is_empty() {
+            return Ok(());
+        }
+
+        // Build sorted+filtered list (same order as the UI).
+        let filter = self.active_tx_account_filter();
+        let mut sorted: Vec<&crate::beancount::parser::Transaction> =
+            self.ledger.transactions.iter()
+                .filter(|txn| match &filter {
+                    None => true,
+                    Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+                })
+                .collect();
+        sorted.sort_by(|a, b| b.date.cmp(&a.date));
+
+        if sorted.is_empty() {
+            return Ok(());
+        }
+
+        // Collect target line numbers (stable file positions).
+        let target_lines: Vec<usize> = if !self.reconcile_selected.is_empty() {
+            // Use the multi-select set
+            self.reconcile_selected.iter().copied().collect()
+        } else {
+            // Fall back to the current cursor
+            let selected = self.tx_selected.min(sorted.len().saturating_sub(1));
+            vec![sorted[selected].line]
+        };
+
+        let path = self.config.resolved_beancount_file();
+        let mut changed = 0usize;
+        for line in &target_lines {
+            crate::beancount::writer::set_reconcile_tag(&path, *line, force)?;
+            changed += 1;
+        }
+
+        self.reload_ledger()?;
+        self.reconcile_selected.clear();
+
+        let action = if force { "reconciled" } else { "unreconciled" };
+        let mut status_parts = vec![format!("{} transaction(s) {}.", changed, action)];
+
+        if git::is_git_repo(path.parent().unwrap_or(&path)) {
+            let msg = format!("reconcile: {} {} transaction(s)", action, changed);
+            match git::commit_file(&path, &msg) {
+                Ok(()) => status_parts.push("git: committed".to_string()),
+                Err(e) => status_parts.push(format!("git: {}", e)),
+            }
+        }
+
+        self.status_message = Some(status_parts.join("  |  "));
         Ok(())
     }
 }

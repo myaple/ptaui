@@ -33,6 +33,13 @@ pub struct Transaction {
     pub line: usize,
 }
 
+impl Transaction {
+    /// Returns true if this transaction has the `#reconciled` tag.
+    pub fn is_reconciled(&self) -> bool {
+        self.tags.iter().any(|t| t == "reconciled")
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Ledger {
     pub accounts: Vec<Account>,

@@ -18,6 +18,11 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
             return handle_modal(app, key);
         }
 
+        // Reconcile mode absorbs all input on the Transactions screen
+        if app.reconcile_mode && app.screen == Screen::Transactions {
+            return handle_reconcile_mode(app, key);
+        }
+
         // ── Global hotkeys (only when no modal is open) ───────────────────
         match key.code {
             KeyCode::Char('q') => {
@@ -208,8 +213,92 @@ fn handle_transactions(app: &mut App, key: KeyEvent) {
                 app.open_modal(Modal::DeleteTransaction);
             }
         }
+        // Enter reconcile mode (uppercase R = Shift+R)
+        KeyCode::Char('R') => {
+            app.reconcile_mode = true;
+            app.reconcile_selected.clear();
+        }
         _ => {}
     }
+}
+
+// ── Reconcile mode ────────────────────────────────────────────────────────────
+
+fn handle_reconcile_mode(app: &mut App, key: KeyEvent) -> Result<()> {
+    let filter = app.active_tx_account_filter();
+    let mut sorted: Vec<&crate::beancount::parser::Transaction> =
+        app.ledger.transactions.iter()
+            .filter(|txn| match &filter {
+                None => true,
+                Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+            })
+            .collect();
+    sorted.sort_by(|a, b| b.date.cmp(&a.date));
+    let max = sorted.len().saturating_sub(1);
+
+    match key.code {
+        KeyCode::Esc => {
+            app.reconcile_mode = false;
+            app.reconcile_selected.clear();
+        }
+        // Navigation — same as normal
+        KeyCode::Down | KeyCode::Char('j') => {
+            if app.tx_selected < max {
+                app.tx_selected += 1;
+                if app.tx_selected >= app.tx_scroll + TX_PAGE {
+                    app.tx_scroll = app.tx_selected.saturating_sub(TX_PAGE - 1);
+                }
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.tx_selected > 0 {
+                app.tx_selected -= 1;
+                if app.tx_selected < app.tx_scroll {
+                    app.tx_scroll = app.tx_selected;
+                }
+            }
+        }
+        KeyCode::PageDown => {
+            app.tx_selected = (app.tx_selected + TX_PAGE).min(max);
+            if app.tx_selected >= app.tx_scroll + TX_PAGE {
+                app.tx_scroll = app.tx_selected.saturating_sub(TX_PAGE - 1);
+            }
+        }
+        KeyCode::PageUp => {
+            app.tx_selected = app.tx_selected.saturating_sub(TX_PAGE);
+            if app.tx_selected < app.tx_scroll {
+                app.tx_scroll = app.tx_selected;
+            }
+        }
+        // Space: toggle current transaction in multi-select
+        KeyCode::Char(' ') => {
+            if !sorted.is_empty() {
+                let selected = app.tx_selected.min(max);
+                let line = sorted[selected].line;
+                if app.reconcile_selected.contains(&line) {
+                    app.reconcile_selected.remove(&line);
+                } else {
+                    app.reconcile_selected.insert(line);
+                }
+            }
+        }
+        // r: reconcile selected (or current) transactions
+        KeyCode::Char('r') => {
+            match app.commit_reconcile_transactions(true) {
+                Ok(()) => {}
+                Err(e) => app.status_message = Some(format!("Error: {}", e)),
+            }
+        }
+        // u: unreconcile selected (or current) transactions
+        KeyCode::Char('u') => {
+            match app.commit_reconcile_transactions(false) {
+                Ok(()) => {}
+                Err(e) => app.status_message = Some(format!("Error: {}", e)),
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 // ── Modal: Add Transaction ────────────────────────────────────────────────────

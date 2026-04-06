@@ -42,6 +42,8 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .take(visible_height)
         .map(|(abs_idx, txn)| {
             let is_selected = abs_idx == selected;
+            let is_reconcile_selected = app.reconcile_selected.contains(&txn.line);
+            let is_reconciled = txn.is_reconciled();
 
             let payee_narration = match &txn.payee {
                 Some(p) => format!("{} — {}", p, txn.narration),
@@ -74,7 +76,29 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 .collect();
             let accounts_str = accounts.join(" / ");
 
-            let flag_style = if is_selected {
+            // Reconcile status emoji: ✓ for reconciled, · for unreconciled
+            let reconcile_icon = if is_reconciled { "✓" } else { "·" };
+
+            // Multi-select indicator in reconcile mode: ● if selected, space otherwise
+            let select_icon = if app.reconcile_mode {
+                if is_reconcile_selected { "●" } else { " " }
+            } else {
+                ""
+            };
+
+            // Choose row background
+            let row_bg = if is_selected && is_reconcile_selected && app.reconcile_mode {
+                // Selected cursor + multi-selected in reconcile mode
+                Some(Color::Magenta)
+            } else if is_selected {
+                Some(Color::Cyan)
+            } else if is_reconcile_selected && app.reconcile_mode {
+                Some(Color::Blue)
+            } else {
+                None
+            };
+
+            let flag_style = if row_bg.is_some() {
                 Style::default().fg(Color::Black)
             } else if txn.flag == '!' {
                 Style::default().fg(Color::Yellow)
@@ -82,10 +106,32 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::Green)
             };
 
-            let row = Line::from(vec![
+            let reconcile_style = if row_bg.is_some() {
+                Style::default().fg(Color::Black)
+            } else if is_reconciled {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            };
+
+            let mut spans = vec![];
+
+            // Multi-select indicator (only in reconcile mode)
+            if app.reconcile_mode {
+                spans.push(Span::styled(
+                    format!("{} ", select_icon),
+                    if is_reconcile_selected && row_bg.is_none() {
+                        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Black)
+                    },
+                ));
+            }
+
+            spans.extend([
                 Span::styled(
                     format!(" {} ", txn.date.format("%Y-%m-%d")),
-                    if is_selected {
+                    if row_bg.is_some() {
                         Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(Color::Cyan)
@@ -94,9 +140,11 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 Span::raw(" "),
                 Span::styled(txn.flag.to_string(), flag_style),
                 Span::raw(" "),
+                // Reconcile status column
+                Span::styled(format!("{} ", reconcile_icon), reconcile_style),
                 Span::styled(
                     format!("{:<40}", &payee_narration.chars().take(40).collect::<String>()),
-                    if is_selected {
+                    if row_bg.is_some() {
                         Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(Color::White)
@@ -104,7 +152,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 ),
                 Span::styled(
                     format!("{:>14}", amount_str),
-                    if is_selected {
+                    if row_bg.is_some() {
                         Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
                     } else {
                         Style::default()
@@ -115,7 +163,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 Span::raw("  "),
                 Span::styled(
                     accounts_str.chars().take(30).collect::<String>(),
-                    if is_selected {
+                    if row_bg.is_some() {
                         Style::default().fg(Color::Black)
                     } else {
                         Style::default().fg(Color::DarkGray)
@@ -123,8 +171,10 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 ),
             ]);
 
-            if is_selected {
-                ListItem::new(row).style(Style::default().bg(Color::Cyan))
+            let row = Line::from(spans);
+
+            if let Some(bg) = row_bg {
+                ListItem::new(row).style(Style::default().bg(bg))
             } else {
                 ListItem::new(row)
             }
@@ -138,11 +188,27 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     } else {
         "  f filter  ".to_string()
     };
-    let title = format!(
-        " Transactions ({}) — ↑↓ navigate  e edit{}",
-        sorted.len(),
-        filter_hint
-    );
+
+    let title = if app.reconcile_mode {
+        let sel_count = app.reconcile_selected.len();
+        let sel_hint = if sel_count > 0 {
+            format!("  {} selected", sel_count)
+        } else {
+            String::new()
+        };
+        format!(
+            " [RECONCILE] ({}){}  space:select  r:reconcile  u:unreconcile  esc:exit",
+            sorted.len(),
+            sel_hint,
+        )
+    } else {
+        format!(
+            " Transactions ({}) — ↑↓ navigate  e edit  R reconcile{}",
+            sorted.len(),
+            filter_hint
+        )
+    };
+
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title(title));
     f.render_widget(list, area);
