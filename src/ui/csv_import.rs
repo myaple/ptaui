@@ -244,7 +244,7 @@ fn render_column_mapping(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(12), // mapping fields
+            Constraint::Length(16), // mapping fields
             Constraint::Min(1),     // preview table
         ])
         .split(area);
@@ -275,6 +275,17 @@ fn render_column_mapping(f: &mut Frame, app: &App, area: Rect) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
+    let col_name_opt = |opt: Option<usize>| -> String {
+        match opt {
+            None => "[--]".to_string(),
+            Some(idx) => state
+                .headers
+                .get(idx)
+                .map(|h| format!("{}: {}", idx, h))
+                .unwrap_or_else(|| format!("{}: ???", idx)),
+        }
+    };
+
     let mappings: Vec<(CsvMappingField, &str, String, String)> = vec![
         (
             CsvMappingField::Date,
@@ -292,7 +303,39 @@ fn render_column_mapping(f: &mut Frame, app: &App, area: Rect) {
             CsvMappingField::Amount,
             "Amount Column ",
             col_name(state.amount_col),
-            format!("e.g. {}", sample(state.amount_col)),
+            if state.debit_col.is_some() {
+                "(ignored when Debit column is set)".to_string()
+            } else {
+                format!("e.g. {}", sample(state.amount_col))
+            },
+        ),
+        (
+            CsvMappingField::Debit,
+            "Debit Column  ",
+            col_name_opt(state.debit_col),
+            if state.debit_col.is_none() {
+                "Space to enable (replaces Amount column)".to_string()
+            } else {
+                format!(
+                    "\u{25C0} \u{25B6} select column  e.g. {}",
+                    sample(state.debit_col.unwrap())
+                )
+            },
+        ),
+        (
+            CsvMappingField::Credit,
+            "Credit Column ",
+            col_name_opt(state.credit_col),
+            if state.debit_col.is_none() {
+                "(enable Debit column first)".to_string()
+            } else if state.credit_col.is_none() {
+                "Space to enable (optional)".to_string()
+            } else {
+                format!(
+                    "\u{25C0} \u{25B6} select column  e.g. {}",
+                    sample(state.credit_col.unwrap())
+                )
+            },
         ),
         (
             CsvMappingField::DateFormat,
@@ -320,6 +363,16 @@ fn render_column_mapping(f: &mut Frame, app: &App, area: Rect) {
                 field,
                 CsvMappingField::Date | CsvMappingField::Payee | CsvMappingField::Amount
             ) {
+            "\u{25C0} \u{25B6} "
+        } else if is_focused
+            && *field == CsvMappingField::Debit
+            && state.debit_col.is_some()
+        {
+            "\u{25C0} \u{25B6} "
+        } else if is_focused
+            && *field == CsvMappingField::Credit
+            && state.credit_col.is_some()
+        {
             "\u{25C0} \u{25B6} "
         } else {
             "  "
@@ -361,7 +414,18 @@ fn render_csv_preview(f: &mut Frame, state: &crate::app::CsvImportState, area: R
         .iter()
         .enumerate()
         .map(|(i, h)| {
-            let style = if i == state.date_col || i == state.payee_col || i == state.amount_col {
+            let is_debit = state.debit_col == Some(i);
+            let is_credit = state.credit_col == Some(i);
+            let use_debit_credit = state.debit_col.is_some();
+            let style = if i == state.date_col || i == state.payee_col {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else if is_debit || is_credit {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else if !use_debit_credit && i == state.amount_col {
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD)

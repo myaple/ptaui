@@ -111,22 +111,24 @@ pub fn parse_rows(
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
 
-        let amount = if let (Some(debit_col), Some(credit_col)) =
-            (mapping.debit_col, mapping.credit_col)
-        {
-            // Separate debit/credit columns
+        let amount = if let Some(debit_col) = mapping.debit_col {
+            // Separate debit/credit columns; credit column is optional
             let debit_str = raw.get(debit_col).map(|s| s.trim()).unwrap_or_default();
-            let credit_str = raw.get(credit_col).map(|s| s.trim()).unwrap_or_default();
             let debit = if debit_str.is_empty() {
                 Decimal::ZERO
             } else {
                 parse_amount(debit_str).with_context(|| format!("Row {}: parsing debit", i + 1))?
             };
-            let credit = if credit_str.is_empty() {
-                Decimal::ZERO
+            let credit = if let Some(credit_col) = mapping.credit_col {
+                let credit_str = raw.get(credit_col).map(|s| s.trim()).unwrap_or_default();
+                if credit_str.is_empty() {
+                    Decimal::ZERO
+                } else {
+                    parse_amount(credit_str)
+                        .with_context(|| format!("Row {}: parsing credit", i + 1))?
+                }
             } else {
-                parse_amount(credit_str)
-                    .with_context(|| format!("Row {}: parsing credit", i + 1))?
+                Decimal::ZERO
             };
             // Credits are positive (money in), debits are negative (money out)
             credit - debit
