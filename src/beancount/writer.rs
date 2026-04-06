@@ -9,6 +9,7 @@ pub struct NewTransaction {
     pub flag: char,
     pub payee: Option<String>,
     pub narration: String,
+    pub tags: Vec<String>,
     pub postings: Vec<NewPosting>,
 }
 
@@ -21,7 +22,7 @@ pub struct NewPosting {
 pub fn format_transaction(txn: &NewTransaction) -> String {
     let mut out = String::new();
     // Header line
-    let header = match &txn.payee {
+    let mut header = match &txn.payee {
         Some(p) => format!(
             "{} {} \"{}\" \"{}\"",
             txn.date.format("%Y-%m-%d"),
@@ -36,6 +37,11 @@ pub fn format_transaction(txn: &NewTransaction) -> String {
             txn.narration
         ),
     };
+
+    for tag in &txn.tags {
+        write!(header, " #{}", tag).unwrap();
+    }
+
     out.push_str(&header);
     out.push('\n');
 
@@ -168,6 +174,72 @@ pub fn delete_transaction(path: &Path, start_line: usize) -> Result<()> {
     Ok(())
 }
 
+/// Update multiple transactions at once. `updates` is a list of `(start_line, new_txn)`.
+/// This is more efficient than calling `replace_transaction` repeatedly because it
+/// handles line number shifts correctly and performs only one write.
+pub fn bulk_update_transactions(
+    path: &Path,
+    mut updates: Vec<(usize, NewTransaction)>,
+) -> Result<()> {
+    if updates.is_empty() {
+        return Ok(());
+    }
+
+    // Sort updates by start_line ascending to process the file in order.
+    updates.sort_by_key(|u| u.0);
+
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("Reading {}", path.display()))?;
+    let file_lines: Vec<&str> = content.lines().collect();
+
+    let mut result_lines: Vec<String> = Vec::new();
+    let mut current_line = 0;
+
+    for (start_line, new_txn) in updates {
+        if start_line < current_line {
+            anyhow::bail!("Overlapping or out-of-order updates");
+        }
+
+        // Add lines before the transaction to be replaced
+        for i in current_line..start_line {
+            result_lines.push(file_lines[i].to_string());
+        }
+
+        // Find the end of the transaction block to be replaced
+        let mut end_line = start_line + 1;
+        while end_line < file_lines.len() {
+            let l = file_lines[end_line];
+            if l.starts_with("  ") || l.starts_with('\t') {
+                end_line += 1;
+            } else {
+                break;
+            }
+        }
+
+        // Add the new transaction lines
+        let new_text = format_transaction(&new_txn);
+        for line in new_text.trim_end_matches('\n').lines() {
+            result_lines.push(line.to_string());
+        }
+
+        current_line = end_line;
+    }
+
+    // Add remaining lines after the last update
+    for i in current_line..file_lines.len() {
+        result_lines.push(file_lines[i].to_string());
+    }
+
+    let mut result = result_lines.join("\n");
+    if content.ends_with('\n') {
+        result.push('\n');
+    }
+
+    std::fs::write(path, &result)
+        .with_context(|| format!("Writing bulk updated transactions to {}", path.display()))?;
+    Ok(())
+}
+
 pub fn append_transaction(path: &Path, txn: &NewTransaction) -> Result<()> {
     let formatted = format_transaction(txn);
     // Ensure file ends with a newline before appending
@@ -189,4 +261,36 @@ pub fn append_transaction(path: &Path, txn: &NewTransaction) -> Result<()> {
     file.write_all(content.as_bytes())
         .with_context(|| format!("Writing transaction to {}", path.display()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_transaction_with_tags() {
+        let txn = NewTransaction {
+            date: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            flag: '*',
+            payee: Some("Payee".to_string()),
+            narration: "Narration".to_string(),
+            tags: vec!["reconciled".to_string(), "tag2".to_string()],
+            postings: vec![
+                NewPosting {
+                    account: "Assets:Checking".to_string(),
+                    amount: Some(Decimal::new(100, 0)),
+                    currency: Some("USD".to_string()),
+                },
+                NewPosting {
+                    account: "Expenses:Food".to_string(),
+                    amount: None,
+                    currency: None,
+                },
+            ],
+        };
+        let formatted = format_transaction(&txn);
+        assert!(formatted.contains("#reconciled"));
+        assert!(formatted.contains("#tag2"));
+        assert!(formatted.starts_with("2024-01-01 * \"Payee\" \"Narration\" #reconciled #tag2"));
+    }
 }

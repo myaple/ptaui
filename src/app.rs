@@ -495,6 +495,10 @@ pub struct App {
     pub tx_account_filter_scroll: usize,
     /// True = "Yes" selected in the delete-transaction confirmation modal.
     pub delete_tx_confirm: bool,
+    /// Reconcile mode: allows marking transactions as reconciled.
+    pub reconcile_mode: bool,
+    /// Selected transaction indices in reconcile mode (points to sorted ledger transactions).
+    pub tx_selected_indices: std::collections::HashSet<usize>,
 }
 
 impl App {
@@ -534,6 +538,8 @@ impl App {
             tx_account_filter_cursor: 0,
             tx_account_filter_scroll: 0,
             delete_tx_confirm: true,
+            reconcile_mode: false,
+            tx_selected_indices: std::collections::HashSet::new(),
         };
         app.rebuild_account_filter();
         app.rebuild_tx_account_filter();
@@ -828,22 +834,111 @@ impl App {
     }
 
     /// Open the edit-transaction modal pre-populated with the currently selected transaction.
+    pub fn sorted_transactions(&self) -> Vec<&crate::beancount::parser::Transaction> {
+        let filter = self.active_tx_account_filter();
+        let mut sorted: Vec<&crate::beancount::parser::Transaction> = self
+            .ledger
+            .transactions
+            .iter()
+            .filter(|txn| match &filter {
+                None => true,
+                Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+            })
+            .collect();
+        sorted.sort_by(|a, b| b.date.cmp(&a.date));
+        sorted
+    }
+
+    pub fn bulk_set_reconcile(&mut self, reconciled: bool) -> Result<()> {
+        if self.tx_selected_indices.is_empty() {
+            return Ok(());
+        }
+
+        let sorted = self.sorted_transactions();
+        let mut updates = Vec::new();
+
+        for &idx in &self.tx_selected_indices {
+            if let Some(txn) = sorted.get(idx) {
+                let mut tags = txn.tags.clone();
+                if reconciled {
+                    if !tags.contains(&"reconciled".to_string()) {
+                        tags.push("reconciled".to_string());
+                    }
+                } else {
+                    tags.retain(|t| t != "reconciled");
+                }
+
+                let new_txn = NewTransaction {
+                    date: txn.date,
+                    flag: txn.flag,
+                    payee: txn.payee.clone(),
+                    narration: txn.narration.clone(),
+                    tags,
+                    postings: txn
+                        .postings
+                        .iter()
+                        .map(|p| NewPosting {
+                            account: p.account.clone(),
+                            amount: p.amount,
+                            currency: p.currency.clone(),
+                        })
+                        .collect(),
+                };
+                updates.push((txn.line, new_txn));
+            }
+        }
+
+        let path = self.config.resolved_beancount_file();
+        crate::beancount::writer::bulk_update_transactions(&path, updates)?;
+        self.reload_ledger()?;
+
+        let status = if reconciled {
+            "Transactions marked as reconciled."
+        } else {
+            "Transactions marked as un-reconciled."
+        };
+        let mut status_parts = vec![status.to_string()];
+
+        if self.config.auto_bean_check {
+            match bean_check(&path) {
+                CheckResult::Ok => {
+                    status_parts.push("bean-check: OK".to_string());
+                    self.check_errors.clear();
+                }
+                CheckResult::Errors(errs) => {
+                    status_parts.push(format!("bean-check: {} error(s)", errs.len()));
+                    self.check_errors = errs;
+                }
+                CheckResult::NotInstalled => {
+                    status_parts.push("(bean-check not installed)".to_string());
+                    self.check_errors.clear();
+                }
+            }
+        }
+
+        if git::is_git_repo(path.parent().unwrap_or(&path)) {
+            let msg = if reconciled {
+                "txn: bulk reconcile"
+            } else {
+                "txn: bulk un-reconcile"
+            };
+            match git::commit_file(&path, msg) {
+                Ok(()) => status_parts.push("git: committed".to_string()),
+                Err(e) => status_parts.push(format!("git: {}", e)),
+            }
+        }
+
+        self.status_message = Some(status_parts.join("  |  "));
+        self.tx_selected_indices.clear();
+        Ok(())
+    }
+
     pub fn open_edit_tx_modal(&mut self) {
         if self.ledger.transactions.is_empty() {
             return;
         }
 
-        // Build the same sorted+filtered order used by the transactions UI (reverse chrono).
-        let filter = self.active_tx_account_filter();
-        let mut sorted: Vec<&crate::beancount::parser::Transaction> =
-            self.ledger.transactions.iter()
-                .filter(|txn| match &filter {
-                    None => true,
-                    Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
-                })
-                .collect();
-        sorted.sort_by(|a, b| b.date.cmp(&a.date));
-
+        let sorted = self.sorted_transactions();
         let selected = self.tx_selected.min(sorted.len().saturating_sub(1));
         let txn = sorted[selected];
 
@@ -903,15 +998,7 @@ impl App {
             return Ok(());
         }
 
-        let filter = self.active_tx_account_filter();
-        let mut sorted: Vec<&crate::beancount::parser::Transaction> =
-            self.ledger.transactions.iter()
-                .filter(|txn| match &filter {
-                    None => true,
-                    Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
-                })
-                .collect();
-        sorted.sort_by(|a, b| b.date.cmp(&a.date));
+        let sorted = self.sorted_transactions();
 
         if sorted.is_empty() {
             return Ok(());
@@ -1021,6 +1108,7 @@ impl App {
                 flag: '*',
                 payee: None,
                 narration: format!("Opening balance for {}", account_name),
+                tags: Vec::new(),
                 postings: vec![
                     NewPosting {
                         account: account_name.clone(),
@@ -1125,11 +1213,18 @@ impl App {
         let category = form.category.trim().to_string();
         let account = form.account.trim().to_string();
 
+        // Preserve tags when editing
+        let tags = self.ledger.transactions.iter()
+            .find(|t| t.line == orig_line)
+            .map(|t| t.tags.clone())
+            .unwrap_or_default();
+
         let updated_txn = NewTransaction {
             date,
             flag: '*',
             payee,
             narration,
+            tags,
             postings: vec![
                 NewPosting {
                     account: category,
@@ -1220,6 +1315,7 @@ impl App {
             flag: '*',
             payee,
             narration,
+            tags: Vec::new(),
             postings: vec![
                 NewPosting {
                     account: category,

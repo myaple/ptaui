@@ -20,16 +20,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     // Apply account filter: keep transactions that have at least one posting
     // whose account is in the active filter set.
     let filter = app.active_tx_account_filter();
-    let mut sorted: Vec<_> = txns
-        .iter()
-        .filter(|txn| match &filter {
-            None => true,
-            Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
-        })
-        .collect();
-
-    // Show in reverse chronological order
-    sorted.sort_by(|a, b| b.date.cmp(&a.date));
+    let sorted = app.sorted_transactions();
 
     let visible_height = area.height.saturating_sub(2) as usize;
     let scroll = app.tx_scroll.min(sorted.len().saturating_sub(1));
@@ -42,6 +33,8 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .take(visible_height)
         .map(|(abs_idx, txn)| {
             let is_selected = abs_idx == selected;
+            let is_checked = app.tx_selected_indices.contains(&abs_idx);
+            let is_reconciled = txn.is_reconciled();
 
             let payee_narration = match &txn.payee {
                 Some(p) => format!("{} — {}", p, txn.narration),
@@ -83,6 +76,22 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             };
 
             let row = Line::from(vec![
+                if app.reconcile_mode {
+                    Span::styled(
+                        if is_checked { " [x] " } else { " [ ] " },
+                        if is_selected {
+                            Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(Color::Magenta)
+                        },
+                    )
+                } else {
+                    Span::raw("")
+                },
+                Span::styled(
+                    if is_reconciled { " ✅ " } else { "    " },
+                    Style::default(),
+                ),
                 Span::styled(
                     format!(" {} ", txn.date.format("%Y-%m-%d")),
                     if is_selected {
@@ -138,9 +147,15 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     } else {
         "  f filter  ".to_string()
     };
+    let reconcile_hint = if app.reconcile_mode {
+        format!(" (RECONCILE MODE: {} selected) — Space select  a all  c clear  r/u reconcile/un", app.tx_selected_indices.len())
+    } else {
+        "  m reconcile".to_string()
+    };
     let title = format!(
-        " Transactions ({}) — ↑↓ navigate  e edit{}",
+        " Transactions ({}) — ↑↓ navigate  e edit{}  f filter{}",
         sorted.len(),
+        reconcile_hint,
         filter_hint
     );
     let list = List::new(items)

@@ -26,11 +26,16 @@ pub struct Transaction {
     pub flag: char,
     pub payee: Option<String>,
     pub narration: String,
-    #[allow(dead_code)]
     pub tags: Vec<String>,
     pub postings: Vec<Posting>,
     /// 0-based line number in the file where this transaction header starts.
     pub line: usize,
+}
+
+impl Transaction {
+    pub fn is_reconciled(&self) -> bool {
+        self.tags.iter().any(|t| t == "reconciled")
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -338,4 +343,30 @@ fn parse_posting(line: &str) -> Option<Posting> {
         amount: None,
         currency: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_txn_with_tags() {
+        let input = "2024-01-01 * \"Payee\" \"Narration\" #reconciled #tag2\n  Assets:Checking  100 USD\n  Expenses:Food";
+        let ledger = parse(input).unwrap();
+        assert_eq!(ledger.transactions.len(), 1);
+        let txn = &ledger.transactions[0];
+        assert_eq!(txn.tags, vec!["reconciled", "tag2"]);
+        assert!(txn.is_reconciled());
+    }
+
+    #[test]
+    fn test_parse_txn_no_payee_with_tags() {
+        let input = "2024-01-01 * \"Narration\" #reconciled\n  Assets:Checking  100 USD\n  Expenses:Food";
+        let ledger = parse(input).unwrap();
+        assert_eq!(ledger.transactions.len(), 1);
+        let txn = &ledger.transactions[0];
+        assert_eq!(txn.payee, None);
+        assert_eq!(txn.narration, "Narration");
+        assert_eq!(txn.tags, vec!["reconciled"]);
+    }
 }

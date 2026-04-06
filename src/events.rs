@@ -158,14 +158,61 @@ fn handle_dashboard(app: &mut App, key: KeyEvent) {
 const TX_PAGE: usize = 20;
 
 fn handle_transactions(app: &mut App, key: KeyEvent) {
-    let filter = app.active_tx_account_filter();
-    let max = app.ledger.transactions.iter()
-        .filter(|txn| match &filter {
-            None => true,
-            Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
-        })
-        .count()
-        .saturating_sub(1);
+    let sorted = app.sorted_transactions();
+    let max = sorted.len().saturating_sub(1);
+
+    if app.reconcile_mode {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('m') => {
+                app.reconcile_mode = false;
+                app.tx_selected_indices.clear();
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if app.tx_selected < max {
+                    app.tx_selected += 1;
+                    if app.tx_selected >= app.tx_scroll + TX_PAGE {
+                        app.tx_scroll = app.tx_selected.saturating_sub(TX_PAGE - 1);
+                    }
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if app.tx_selected > 0 {
+                    app.tx_selected -= 1;
+                    if app.tx_selected < app.tx_scroll {
+                        app.tx_scroll = app.tx_selected;
+                    }
+                }
+            }
+            KeyCode::Char(' ') => {
+                if app.tx_selected_indices.contains(&app.tx_selected) {
+                    app.tx_selected_indices.remove(&app.tx_selected);
+                } else {
+                    app.tx_selected_indices.insert(app.tx_selected);
+                }
+            }
+            KeyCode::Char('a') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                for i in 0..sorted.len() {
+                    app.tx_selected_indices.insert(i);
+                }
+            }
+            KeyCode::Char('c') => {
+                app.tx_selected_indices.clear();
+            }
+            KeyCode::Char('r') => {
+                if let Err(e) = app.bulk_set_reconcile(true) {
+                    app.status_message = Some(format!("Error: {}", e));
+                }
+            }
+            KeyCode::Char('u') => {
+                if let Err(e) = app.bulk_set_reconcile(false) {
+                    app.status_message = Some(format!("Error: {}", e));
+                }
+            }
+            _ => {}
+        }
+        return;
+    }
+
     match key.code {
         KeyCode::Down | KeyCode::Char('j') => {
             if app.tx_selected < max {
@@ -202,6 +249,10 @@ fn handle_transactions(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('f') => {
             app.open_modal(Modal::TxAccountFilter);
+        }
+        KeyCode::Char('m') => {
+            app.reconcile_mode = true;
+            app.tx_selected_indices.clear();
         }
         KeyCode::Char('d') => {
             if !app.ledger.transactions.is_empty() {
