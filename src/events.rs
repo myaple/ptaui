@@ -135,6 +135,7 @@ fn handle_modal(app: &mut App, key: KeyEvent) -> Result<()> {
         Some(Modal::AccountFilter) => handle_account_filter(app, key),
         Some(Modal::CategoryTransactions) => handle_category_transactions(app, key),
         Some(Modal::TxAccountFilter) => handle_tx_account_filter(app, key),
+        Some(Modal::DeleteTransaction) => handle_delete_tx(app, key),
         None => Ok(()),
     }
 }
@@ -194,6 +195,11 @@ fn handle_transactions(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('f') => {
             app.open_modal(Modal::TxAccountFilter);
+        }
+        KeyCode::Char('d') => {
+            if !app.ledger.transactions.is_empty() {
+                app.open_modal(Modal::DeleteTransaction);
+            }
         }
         _ => {}
     }
@@ -492,6 +498,32 @@ fn handle_account_filter(app: &mut App, key: KeyEvent) -> Result<()> {
         KeyCode::Char('u') => {
             for entry in app.account_filter.iter_mut() {
                 entry.1 = false;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+// ── Modal: Delete Transaction ─────────────────────────────────────────────────
+
+fn handle_delete_tx(app: &mut App, key: KeyEvent) -> Result<()> {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') => {
+            app.close_modal();
+        }
+        KeyCode::Left | KeyCode::Right | KeyCode::Tab | KeyCode::Char('h') | KeyCode::Char('l') => {
+            app.delete_tx_confirm = !app.delete_tx_confirm;
+        }
+        KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y') => {
+            if app.delete_tx_confirm {
+                app.close_modal();
+                match app.commit_delete_transaction() {
+                    Ok(()) => app.status_message = Some("Transaction deleted.".to_string()),
+                    Err(e) => app.status_message = Some(format!("Error: {}", e)),
+                }
+            } else {
+                app.close_modal();
             }
         }
         _ => {}
