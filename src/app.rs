@@ -912,7 +912,11 @@ impl App {
         }
 
         let selected = self.tx_selected.min(sorted.len().saturating_sub(1));
-        let line = sorted[selected].line;
+        let txn = sorted[selected];
+        let line = txn.line;
+        // Capture description before the ledger is reloaded.
+        let date = txn.date;
+        let narration = txn.narration.clone();
 
         let path = self.config.resolved_beancount_file();
         crate::beancount::writer::delete_transaction(&path, line)?;
@@ -925,6 +929,14 @@ impl App {
             self.tx_scroll = 0;
         } else if self.tx_selected >= new_len {
             self.tx_selected = new_len - 1;
+        }
+
+        if git::is_git_repo(path.parent().unwrap_or(&path)) {
+            let msg = format!("txn: delete {} {}", date.format("%Y-%m-%d"), narration);
+            match git::commit_file(&path, &msg) {
+                Ok(()) => self.status_message = Some("Transaction deleted  |  git: committed".to_string()),
+                Err(e) => self.status_message = Some(format!("Transaction deleted  |  git: {}", e)),
+            }
         }
 
         Ok(())
