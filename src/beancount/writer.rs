@@ -168,6 +168,48 @@ pub fn delete_transaction(path: &Path, start_line: usize) -> Result<()> {
     Ok(())
 }
 
+/// Set or clear the `#reconciled` tag on the transaction header at `start_line` (0-based).
+/// Returns the new reconciled state (true = reconciled, false = unreconciled).
+pub fn set_reconcile_tag(path: &Path, start_line: usize, reconciled: bool) -> Result<bool> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("Reading {}", path.display()))?;
+    let mut file_lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+
+    if start_line >= file_lines.len() {
+        anyhow::bail!("Transaction start line {} is out of range", start_line);
+    }
+
+    let header = &file_lines[start_line];
+
+    // Remove any existing #reconciled tag first
+    let without_tag = header
+        .split_whitespace()
+        .filter(|tok| *tok != "#reconciled")
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    // Re-add leading whitespace if original had it (shouldn't for headers, but be safe)
+    let leading: String = header.chars().take_while(|c| c.is_whitespace()).collect();
+
+    let new_header = if reconciled {
+        format!("{}{} #reconciled", leading, without_tag)
+    } else {
+        format!("{}{}", leading, without_tag)
+    };
+
+    file_lines[start_line] = new_header;
+
+    let mut result = file_lines.join("\n");
+    if content.ends_with('\n') {
+        result.push('\n');
+    }
+
+    std::fs::write(path, &result)
+        .with_context(|| format!("Writing reconcile tag to {}", path.display()))?;
+
+    Ok(reconciled)
+}
+
 pub fn append_transaction(path: &Path, txn: &NewTransaction) -> Result<()> {
     let formatted = format_transaction(txn);
     // Ensure file ends with a newline before appending
