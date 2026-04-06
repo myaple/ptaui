@@ -2,6 +2,7 @@ pub mod account_filter;
 pub mod add_account;
 pub mod add_tx;
 pub mod category_transactions;
+pub mod csv_import;
 pub mod dashboard;
 pub mod delete_tx;
 pub mod reports;
@@ -54,6 +55,7 @@ pub fn render(f: &mut Frame, app: &App) {
         Some(Modal::CategoryTransactions) => category_transactions::render_modal(f, app),
         Some(Modal::TxAccountFilter) => tx_account_filter::render_modal(f, app),
         Some(Modal::DeleteTransaction) => delete_tx::render_modal(f, app),
+        Some(Modal::CsvImport) => csv_import::render_modal(f, app),
         None => {}
     }
 }
@@ -92,14 +94,11 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
         let file = app.config.resolved_beancount_file();
         if app.screen == Screen::Transactions && !app.ledger.transactions.is_empty() {
             format!(
-                " {} | q quit  1-3 screens  a add  e edit  d delete  f filter  r reload",
+                " {} | q quit  1-3 screens  a add  e edit  d delete  f filter  i import csv  r reload",
                 file.display()
             )
         } else {
-            format!(
-                " {} | q quit  1-3 screens  a add  r reload",
-                file.display()
-            )
+            format!(" {} | q quit  1-3 screens  a add  r reload", file.display())
         }
     };
 

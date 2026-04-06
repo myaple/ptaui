@@ -25,7 +25,9 @@ pub fn render_modal(f: &mut Frame, app: &App) {
     // Message
     let msg = Paragraph::new(Line::from(vec![Span::styled(
         "  Delete this transaction?",
-        Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
     )]))
     .block(
         Block::default()

@@ -11,8 +11,11 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let txns = &app.ledger.transactions;
 
     if txns.is_empty() {
-        let para = Paragraph::new("  No transactions found.")
-            .block(Block::default().borders(Borders::ALL).title(" Transactions "));
+        let para = Paragraph::new("  No transactions found.").block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Transactions "),
+        );
         f.render_widget(para, area);
         return;
     }
@@ -72,7 +75,13 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             let accounts: Vec<String> = txn
                 .postings
                 .iter()
-                .map(|p| p.account.split(':').next_back().unwrap_or(&p.account).to_string())
+                .map(|p| {
+                    p.account
+                        .split(':')
+                        .next_back()
+                        .unwrap_or(&p.account)
+                        .to_string()
+                })
                 .collect();
             let accounts_str = accounts.join(" / ");
 
@@ -81,7 +90,11 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
             // Multi-select indicator in reconcile mode: ● if selected, space otherwise
             let select_icon = if app.reconcile_mode {
-                if is_reconcile_selected { "●" } else { " " }
+                if is_reconcile_selected {
+                    "●"
+                } else {
+                    " "
+                }
             } else {
                 ""
             };
@@ -121,7 +134,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 spans.push(Span::styled(
                     format!("{} ", select_icon),
                     if is_reconcile_selected && row_bg.is_none() {
-                        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::Magenta)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(Color::Black)
                     },
@@ -132,7 +147,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 Span::styled(
                     format!(" {} ", txn.date.format("%Y-%m-%d")),
                     if row_bg.is_some() {
-                        Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::Black)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(Color::Cyan)
                     },
@@ -143,9 +160,14 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 // Reconcile status column
                 Span::styled(format!("{} ", reconcile_icon), reconcile_style),
                 Span::styled(
-                    format!("{:<40}", &payee_narration.chars().take(40).collect::<String>()),
+                    format!(
+                        "{:<40}",
+                        &payee_narration.chars().take(40).collect::<String>()
+                    ),
                     if row_bg.is_some() {
-                        Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::Black)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(Color::White)
                     },
@@ -153,7 +175,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 Span::styled(
                     format!("{:>14}", amount_str),
                     if row_bg.is_some() {
-                        Style::default().fg(Color::Black).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::Black)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default()
                             .fg(Color::Yellow)
@@ -209,7 +233,6 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         )
     };
 
-    let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     f.render_widget(list, area);
 }

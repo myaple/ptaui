@@ -1,6 +1,8 @@
 use crate::beancount::parser::Ledger;
 use crate::beancount::validator::{bean_check, CheckResult};
-use crate::beancount::writer::{append_account_open, append_transaction, replace_transaction, NewPosting, NewTransaction};
+use crate::beancount::writer::{
+    append_account_open, append_transaction, replace_transaction, NewPosting, NewTransaction,
+};
 use crate::config::Config;
 use crate::git;
 use anyhow::{Context, Result};
@@ -34,6 +36,8 @@ pub enum Modal {
     TxAccountFilter,
     /// Confirmation prompt before deleting the selected transaction.
     DeleteTransaction,
+    /// CSV import wizard (multi-step).
+    CsvImport,
 }
 
 // ── Reports view state ────────────────────────────────────────────────────────
@@ -56,7 +60,10 @@ pub enum BreakdownPeriod {
 impl BreakdownPeriod {
     pub fn current_month() -> Self {
         let now = Local::now().date_naive();
-        Self::Month { year: now.year(), month: now.month() }
+        Self::Month {
+            year: now.year(),
+            month: now.month(),
+        }
     }
 
     pub fn label(&self) -> String {
@@ -71,9 +78,7 @@ impl BreakdownPeriod {
             Self::Month { year, month } => {
                 chrono::NaiveDate::from_ymd_opt(*year, *month, 1).unwrap()
             }
-            Self::Year { year } => {
-                chrono::NaiveDate::from_ymd_opt(*year, 1, 1).unwrap()
-            }
+            Self::Year { year } => chrono::NaiveDate::from_ymd_opt(*year, 1, 1).unwrap(),
         }
     }
 
@@ -87,9 +92,7 @@ impl BreakdownPeriod {
                     chrono::NaiveDate::from_ymd_opt(*year, month + 1, 1).unwrap()
                 }
             }
-            Self::Year { year } => {
-                chrono::NaiveDate::from_ymd_opt(year + 1, 1, 1).unwrap()
-            }
+            Self::Year { year } => chrono::NaiveDate::from_ymd_opt(year + 1, 1, 1).unwrap(),
         }
     }
 
@@ -97,9 +100,15 @@ impl BreakdownPeriod {
         match self {
             Self::Month { year, month } => {
                 if *month == 1 {
-                    Self::Month { year: year - 1, month: 12 }
+                    Self::Month {
+                        year: year - 1,
+                        month: 12,
+                    }
                 } else {
-                    Self::Month { year: *year, month: month - 1 }
+                    Self::Month {
+                        year: *year,
+                        month: month - 1,
+                    }
                 }
             }
             Self::Year { year } => Self::Year { year: year - 1 },
@@ -110,9 +119,15 @@ impl BreakdownPeriod {
         match self {
             Self::Month { year, month } => {
                 if *month == 12 {
-                    Self::Month { year: year + 1, month: 1 }
+                    Self::Month {
+                        year: year + 1,
+                        month: 1,
+                    }
                 } else {
-                    Self::Month { year: *year, month: month + 1 }
+                    Self::Month {
+                        year: *year,
+                        month: month + 1,
+                    }
                 }
             }
             Self::Year { year } => Self::Year { year: year + 1 },
@@ -123,7 +138,10 @@ impl BreakdownPeriod {
     pub fn as_month(&self) -> Self {
         match self {
             Self::Month { .. } => self.clone(),
-            Self::Year { year } => Self::Month { year: *year, month: 1 },
+            Self::Year { year } => Self::Month {
+                year: *year,
+                month: 1,
+            },
         }
     }
 
@@ -255,14 +273,14 @@ impl AddTxForm {
 
     pub fn current_field_mut(&mut self) -> &mut String {
         match self.focused {
-            AddTxField::Date      => &mut self.date,
-            AddTxField::Payee     => &mut self.payee,
+            AddTxField::Date => &mut self.date,
+            AddTxField::Payee => &mut self.payee,
             AddTxField::Narration => &mut self.narration,
-            AddTxField::Category  => &mut self.category,
-            AddTxField::Account   => &mut self.account,
-            AddTxField::Amount    => &mut self.amount,
-            AddTxField::Currency  => &mut self.currency,
-            AddTxField::Confirm   => &mut self.narration, // dummy
+            AddTxField::Category => &mut self.category,
+            AddTxField::Account => &mut self.account,
+            AddTxField::Amount => &mut self.amount,
+            AddTxField::Currency => &mut self.currency,
+            AddTxField::Confirm => &mut self.narration, // dummy
         }
     }
 
@@ -272,9 +290,9 @@ impl AddTxForm {
             return;
         }
         let prefix = match self.focused {
-            AddTxField::Payee    => &self.payee,
+            AddTxField::Payee => &self.payee,
             AddTxField::Category => &self.category,
-            AddTxField::Account  => &self.account,
+            AddTxField::Account => &self.account,
             _ => return,
         };
         if let Some(suggestion) = suggestions
@@ -284,9 +302,9 @@ impl AddTxForm {
         {
             let suggestion = suggestion.clone();
             match self.focused {
-                AddTxField::Payee    => self.payee = suggestion,
+                AddTxField::Payee => self.payee = suggestion,
                 AddTxField::Category => self.category = suggestion,
-                AddTxField::Account  => self.account = suggestion,
+                AddTxField::Account => self.account = suggestion,
                 _ => {}
             }
         }
@@ -313,7 +331,8 @@ impl AddTxForm {
                     return vec![];
                 }
                 let lower = prefix.to_lowercase();
-                let mut primary: Vec<String> = self.account_suggestions
+                let mut primary: Vec<String> = self
+                    .account_suggestions
                     .iter()
                     .filter(|a| {
                         let al = a.to_lowercase();
@@ -322,7 +341,8 @@ impl AddTxForm {
                     })
                     .cloned()
                     .collect();
-                let secondary: Vec<String> = self.account_suggestions
+                let secondary: Vec<String> = self
+                    .account_suggestions
                     .iter()
                     .filter(|a| {
                         let al = a.to_lowercase();
@@ -342,7 +362,8 @@ impl AddTxForm {
                     return vec![];
                 }
                 let lower = prefix.to_lowercase();
-                let mut primary: Vec<String> = self.account_suggestions
+                let mut primary: Vec<String> = self
+                    .account_suggestions
                     .iter()
                     .filter(|a| {
                         let al = a.to_lowercase();
@@ -351,7 +372,8 @@ impl AddTxForm {
                     })
                     .cloned()
                     .collect();
-                let secondary: Vec<String> = self.account_suggestions
+                let secondary: Vec<String> = self
+                    .account_suggestions
                     .iter()
                     .filter(|a| {
                         let al = a.to_lowercase();
@@ -386,22 +408,22 @@ pub enum AddAccountField {
 impl AddAccountField {
     pub fn next(&self) -> Self {
         match self {
-            Self::AccountType    => Self::SubName,
-            Self::SubName        => Self::Currencies,
-            Self::Currencies     => Self::Date,
-            Self::Date           => Self::InitialBalance,
+            Self::AccountType => Self::SubName,
+            Self::SubName => Self::Currencies,
+            Self::Currencies => Self::Date,
+            Self::Date => Self::InitialBalance,
             Self::InitialBalance => Self::Confirm,
-            Self::Confirm        => Self::AccountType,
+            Self::Confirm => Self::AccountType,
         }
     }
     pub fn prev(&self) -> Self {
         match self {
-            Self::AccountType    => Self::Confirm,
-            Self::SubName        => Self::AccountType,
-            Self::Currencies     => Self::SubName,
-            Self::Date           => Self::Currencies,
+            Self::AccountType => Self::Confirm,
+            Self::SubName => Self::AccountType,
+            Self::Currencies => Self::SubName,
+            Self::Date => Self::Currencies,
             Self::InitialBalance => Self::Date,
-            Self::Confirm        => Self::InitialBalance,
+            Self::Confirm => Self::InitialBalance,
         }
     }
 }
@@ -440,6 +462,141 @@ impl AddAccountForm {
         } else {
             format!("{}:{}", t, self.sub_name.trim())
         }
+    }
+}
+
+// ── CSV Import ───────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CsvImportStep {
+    FilePath,
+    AccountSelect,
+    ColumnMapping,
+    Review,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CsvMappingField {
+    Date,
+    Payee,
+    Amount,
+    DateFormat,
+    Negate,
+}
+
+impl CsvMappingField {
+    pub fn next(&self) -> Self {
+        match self {
+            Self::Date => Self::Payee,
+            Self::Payee => Self::Amount,
+            Self::Amount => Self::DateFormat,
+            Self::DateFormat => Self::Negate,
+            Self::Negate => Self::Date,
+        }
+    }
+
+    pub fn prev(&self) -> Self {
+        match self {
+            Self::Date => Self::Negate,
+            Self::Payee => Self::Date,
+            Self::Amount => Self::Payee,
+            Self::DateFormat => Self::Amount,
+            Self::Negate => Self::DateFormat,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CsvImportState {
+    pub step: CsvImportStep,
+    pub file_path: String,
+    pub account: String,
+    pub account_suggestions: Vec<String>,
+    pub headers: Vec<String>,
+    pub raw_rows: Vec<Vec<String>>,
+    pub date_col: usize,
+    pub payee_col: usize,
+    pub amount_col: usize,
+    pub mapping_focused: CsvMappingField,
+    pub date_format: String,
+    pub negate_amounts: bool,
+    pub rows: Vec<crate::beancount::csv::CsvRow>,
+    pub cursor: usize,
+    pub scroll: usize,
+    pub category_suggestions: Vec<String>,
+    pub error: Option<String>,
+    pub editing_category: bool,
+}
+
+impl CsvImportState {
+    pub fn new(account_suggestions: Vec<String>, category_suggestions: Vec<String>) -> Self {
+        Self {
+            step: CsvImportStep::FilePath,
+            file_path: String::new(),
+            account: String::new(),
+            account_suggestions,
+            headers: Vec::new(),
+            raw_rows: Vec::new(),
+            date_col: 0,
+            payee_col: 1,
+            amount_col: 2,
+            mapping_focused: CsvMappingField::Date,
+            date_format: "%m/%d/%Y".to_string(),
+            negate_amounts: false,
+            rows: Vec::new(),
+            cursor: 0,
+            scroll: 0,
+            category_suggestions,
+            error: None,
+            editing_category: false,
+        }
+    }
+
+    /// Filter account suggestions by prefix (case-insensitive).
+    pub fn filtered_account_suggestions(&self) -> Vec<&str> {
+        if self.account.is_empty() {
+            return self
+                .account_suggestions
+                .iter()
+                .map(|s| s.as_str())
+                .take(10)
+                .collect();
+        }
+        let lower = self.account.to_lowercase();
+        self.account_suggestions
+            .iter()
+            .filter(|s| s.to_lowercase().contains(&lower))
+            .map(|s| s.as_str())
+            .take(10)
+            .collect()
+    }
+
+    /// Filter category suggestions for the current row.
+    pub fn filtered_category_suggestions(&self) -> Vec<&str> {
+        if let Some(row) = self.rows.get(self.cursor) {
+            if row.category.is_empty() {
+                return self
+                    .category_suggestions
+                    .iter()
+                    .map(|s| s.as_str())
+                    .take(10)
+                    .collect();
+            }
+            let lower = row.category.to_lowercase();
+            self.category_suggestions
+                .iter()
+                .filter(|s| s.to_lowercase().contains(&lower))
+                .map(|s| s.as_str())
+                .take(10)
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Number of columns in the CSV.
+    pub fn num_cols(&self) -> usize {
+        self.headers.len()
     }
 }
 
@@ -499,6 +656,8 @@ pub struct App {
     pub reconcile_mode: bool,
     /// Set of transaction file-line numbers (txn.line) currently multi-selected in reconcile mode.
     pub reconcile_selected: std::collections::HashSet<usize>,
+    /// State for the CSV import wizard.
+    pub csv_import_state: Option<CsvImportState>,
 }
 
 impl App {
@@ -540,6 +699,7 @@ impl App {
             delete_tx_confirm: true,
             reconcile_mode: false,
             reconcile_selected: std::collections::HashSet::new(),
+            csv_import_state: None,
         };
         app.rebuild_account_filter();
         app.rebuild_tx_account_filter();
@@ -666,8 +826,7 @@ impl App {
              option \"operating_currency\" \"{}\"\n",
             self.config.currency
         );
-        std::fs::write(&path, &starter)
-            .with_context(|| format!("Creating {}", path.display()))?;
+        std::fs::write(&path, &starter).with_context(|| format!("Creating {}", path.display()))?;
 
         self.file_found = true;
         self.reload_ledger()?;
@@ -702,7 +861,11 @@ impl App {
     }
 
     pub fn account_names(&self) -> Vec<String> {
-        self.ledger.accounts.iter().map(|a| a.name.clone()).collect()
+        self.ledger
+            .accounts
+            .iter()
+            .map(|a| a.name.clone())
+            .collect()
     }
 
     /// If the add_tx_form payee matches a known payee, auto-fill the category
@@ -716,7 +879,11 @@ impl App {
 
         // Skip if all three fields are already filled in.
         let (cat_empty, acct_empty, narr_empty) = match self.add_tx_form.as_ref() {
-            Some(f) => (f.category.is_empty(), f.account.is_empty(), f.narration.is_empty()),
+            Some(f) => (
+                f.category.is_empty(),
+                f.account.is_empty(),
+                f.narration.is_empty(),
+            ),
             None => return,
         };
         if !cat_empty && !acct_empty && !narr_empty {
@@ -819,6 +986,16 @@ impl App {
             Modal::CategoryTransactions => {
                 // State set by the caller before calling open_modal.
             }
+            Modal::CsvImport => {
+                let accounts = self.account_names();
+                // Category suggestions: Expenses and Income accounts
+                let categories: Vec<String> = accounts
+                    .iter()
+                    .filter(|a| a.starts_with("Expenses") || a.starts_with("Income"))
+                    .cloned()
+                    .collect();
+                self.csv_import_state = Some(CsvImportState::new(accounts, categories));
+            }
         }
         self.modal = Some(modal);
         // Don't clear status_message — it stays visible in the background
@@ -830,6 +1007,7 @@ impl App {
         self.add_tx_form = None;
         self.add_account_form = None;
         self.edit_tx_orig_line = None;
+        self.csv_import_state = None;
         // account_filter state is intentionally kept across close so selections persist.
     }
 
@@ -841,13 +1019,15 @@ impl App {
 
         // Build the same sorted+filtered order used by the transactions UI (reverse chrono).
         let filter = self.active_tx_account_filter();
-        let mut sorted: Vec<&crate::beancount::parser::Transaction> =
-            self.ledger.transactions.iter()
-                .filter(|txn| match &filter {
-                    None => true,
-                    Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
-                })
-                .collect();
+        let mut sorted: Vec<&crate::beancount::parser::Transaction> = self
+            .ledger
+            .transactions
+            .iter()
+            .filter(|txn| match &filter {
+                None => true,
+                Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+            })
+            .collect();
         sorted.sort_by(|a, b| b.date.cmp(&a.date));
 
         let selected = self.tx_selected.min(sorted.len().saturating_sub(1));
@@ -910,13 +1090,15 @@ impl App {
         }
 
         let filter = self.active_tx_account_filter();
-        let mut sorted: Vec<&crate::beancount::parser::Transaction> =
-            self.ledger.transactions.iter()
-                .filter(|txn| match &filter {
-                    None => true,
-                    Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
-                })
-                .collect();
+        let mut sorted: Vec<&crate::beancount::parser::Transaction> = self
+            .ledger
+            .transactions
+            .iter()
+            .filter(|txn| match &filter {
+                None => true,
+                Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+            })
+            .collect();
         sorted.sort_by(|a, b| b.date.cmp(&a.date));
 
         if sorted.is_empty() {
@@ -946,7 +1128,9 @@ impl App {
         if git::is_git_repo(path.parent().unwrap_or(&path)) {
             let msg = format!("txn: delete {} {}", date.format("%Y-%m-%d"), narration);
             match git::commit_file(&path, &msg) {
-                Ok(()) => self.status_message = Some("Transaction deleted  |  git: committed".to_string()),
+                Ok(()) => {
+                    self.status_message = Some("Transaction deleted  |  git: committed".to_string())
+                }
                 Err(e) => self.status_message = Some(format!("Transaction deleted  |  git: {}", e)),
             }
         }
@@ -966,7 +1150,10 @@ impl App {
         }
         // Validate: only letters, digits, colons, hyphens
         let sub = form.sub_name.trim();
-        if !sub.chars().all(|c| c.is_alphanumeric() || c == ':' || c == '-' || c == '_') {
+        if !sub
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == ':' || c == '-' || c == '_')
+        {
             anyhow::bail!("Account name may only contain letters, digits, ':', '-', '_'");
         }
         // Each segment must start with uppercase
@@ -974,8 +1161,16 @@ impl App {
             if segment.is_empty() {
                 anyhow::bail!("Account name segments cannot be empty");
             }
-            if !segment.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
-                anyhow::bail!("Each account segment must start with an uppercase letter (got \"{}\")", segment);
+            if !segment
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
+                anyhow::bail!(
+                    "Each account segment must start with an uppercase letter (got \"{}\")",
+                    segment
+                );
             }
         }
 
@@ -993,8 +1188,9 @@ impl App {
             if raw.is_empty() {
                 None
             } else {
-                let amount = Decimal::from_str(raw)
-                    .map_err(|_| anyhow::anyhow!("Invalid initial balance — enter a number, e.g. 1500.00"))?;
+                let amount = Decimal::from_str(raw).map_err(|_| {
+                    anyhow::anyhow!("Invalid initial balance — enter a number, e.g. 1500.00")
+                })?;
                 let currency = currencies
                     .first()
                     .cloned()
@@ -1013,11 +1209,7 @@ impl App {
             const EQUITY_ACCT: &str = "Equity:OpeningBalances";
 
             // Ensure Equity:OpeningBalances is open — add its open directive if missing
-            let already_open = self
-                .ledger
-                .accounts
-                .iter()
-                .any(|a| a.name == EQUITY_ACCT);
+            let already_open = self.ledger.accounts.iter().any(|a| a.name == EQUITY_ACCT);
             if !already_open {
                 append_account_open(&path, date, EQUITY_ACCT, std::slice::from_ref(currency))?;
             }
@@ -1046,7 +1238,10 @@ impl App {
         self.reload_ledger()?;
 
         let mut status_parts = vec![match &initial_balance {
-            Some((amt, cur)) => format!("Account '{}' added with opening balance {} {}.", account_name, amt, cur),
+            Some((amt, cur)) => format!(
+                "Account '{}' added with opening balance {} {}.",
+                account_name, amt, cur
+            ),
             None => format!("Account '{}' added.", account_name),
         }];
 
@@ -1085,8 +1280,7 @@ impl App {
             match git::init_repo(dir) {
                 Ok(msg) => {
                     self.startup.git_status = GitStatus::Controlled;
-                    self.startup.git_init_result =
-                        Some(format!("Git repo initialised. {}", msg));
+                    self.startup.git_init_result = Some(format!("Git repo initialised. {}", msg));
                 }
                 Err(e) => {
                     self.startup.git_init_result = Some(format!("git init failed: {}", e));
@@ -1115,8 +1309,8 @@ impl App {
         if form.account.trim().is_empty() {
             anyhow::bail!("Account cannot be empty");
         }
-        let amount = Decimal::from_str(form.amount.trim())
-            .map_err(|_| anyhow::anyhow!("Invalid amount"))?;
+        let amount =
+            Decimal::from_str(form.amount.trim()).map_err(|_| anyhow::anyhow!("Invalid amount"))?;
         let currency = form.currency.trim().to_string();
         if currency.is_empty() {
             anyhow::bail!("Currency cannot be empty");
@@ -1202,8 +1396,8 @@ impl App {
         if form.account.trim().is_empty() {
             anyhow::bail!("Account cannot be empty");
         }
-        let amount = Decimal::from_str(form.amount.trim())
-            .map_err(|_| anyhow::anyhow!("Invalid amount"))?;
+        let amount =
+            Decimal::from_str(form.amount.trim()).map_err(|_| anyhow::anyhow!("Invalid amount"))?;
         let currency = form.currency.trim().to_string();
         if currency.is_empty() {
             anyhow::bail!("Currency cannot be empty");
@@ -1266,11 +1460,7 @@ impl App {
 
         // git commit
         if git::is_git_repo(path.parent().unwrap_or(&path)) {
-            let msg = format!(
-                "txn: {} {}",
-                date.format("%Y-%m-%d"),
-                narration_clone
-            );
+            let msg = format!("txn: {} {}", date.format("%Y-%m-%d"), narration_clone);
             match git::commit_file(&path, &msg) {
                 Ok(()) => status_parts.push("git: committed".to_string()),
                 Err(e) => status_parts.push(format!("git: {}", e)),
@@ -1279,6 +1469,98 @@ impl App {
 
         self.status_message = Some(status_parts.join("  |  "));
 
+        Ok(())
+    }
+
+    /// Write all included CSV import rows to the beancount file.
+    pub fn commit_csv_import(&mut self) -> Result<()> {
+        let state = self
+            .csv_import_state
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No CSV import state"))?;
+
+        let included: Vec<_> = state.rows.iter().filter(|r| r.include).collect();
+        if included.is_empty() {
+            anyhow::bail!("No transactions selected for import");
+        }
+
+        // Validate all included rows have categories
+        for (i, row) in included.iter().enumerate() {
+            if row.category.trim().is_empty() {
+                anyhow::bail!(
+                    "Transaction {} ({} {}) has no category assigned",
+                    i + 1,
+                    row.date,
+                    row.payee
+                );
+            }
+        }
+
+        let path = self.config.resolved_beancount_file();
+        let currency = self.config.currency.clone();
+        let account = state.account.clone();
+        let count = included.len();
+
+        for row in &included {
+            let new_txn = NewTransaction {
+                date: row.date,
+                flag: '*',
+                payee: if row.payee.is_empty() {
+                    None
+                } else {
+                    Some(row.payee.clone())
+                },
+                narration: row.payee.clone(),
+                postings: vec![
+                    NewPosting {
+                        account: row.category.clone(),
+                        amount: Some(row.amount.abs()),
+                        currency: Some(currency.clone()),
+                    },
+                    NewPosting {
+                        account: account.clone(),
+                        amount: Some(if row.amount.is_sign_negative() {
+                            row.amount
+                        } else {
+                            -row.amount
+                        }),
+                        currency: Some(currency.clone()),
+                    },
+                ],
+            };
+            append_transaction(&path, &new_txn)?;
+        }
+
+        self.reload_ledger()?;
+
+        let mut status_parts: Vec<String> = vec![format!("Imported {} transaction(s).", count)];
+
+        if self.config.auto_bean_check {
+            match bean_check(&path) {
+                CheckResult::Ok => {
+                    status_parts.push("bean-check: OK".to_string());
+                    self.check_errors.clear();
+                }
+                CheckResult::Errors(errs) => {
+                    status_parts.push(format!("bean-check: {} error(s)", errs.len()));
+                    self.check_errors = errs;
+                }
+                CheckResult::NotInstalled => {
+                    status_parts.push("(bean-check not installed)".to_string());
+                    self.check_errors.clear();
+                }
+            }
+        }
+
+        if git::is_git_repo(path.parent().unwrap_or(&path)) {
+            let msg = format!("csv import: {} transactions", count);
+            match git::commit_file(&path, &msg) {
+                Ok(()) => status_parts.push("git: committed".to_string()),
+                Err(e) => status_parts.push(format!("git: {}", e)),
+            }
+        }
+
+        self.status_message = Some(status_parts.join("  |  "));
         Ok(())
     }
 
@@ -1296,13 +1578,15 @@ impl App {
 
         // Build sorted+filtered list (same order as the UI).
         let filter = self.active_tx_account_filter();
-        let mut sorted: Vec<&crate::beancount::parser::Transaction> =
-            self.ledger.transactions.iter()
-                .filter(|txn| match &filter {
-                    None => true,
-                    Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
-                })
-                .collect();
+        let mut sorted: Vec<&crate::beancount::parser::Transaction> = self
+            .ledger
+            .transactions
+            .iter()
+            .filter(|txn| match &filter {
+                None => true,
+                Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+            })
+            .collect();
         sorted.sort_by(|a, b| b.date.cmp(&a.date));
 
         if sorted.is_empty() {

@@ -37,7 +37,9 @@ fn render_modal_with_title(f: &mut Frame, app: &App, title: &str) {
 
 fn label_style(focused: bool) -> Style {
     if focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::DarkGray)
     }
@@ -45,7 +47,9 @@ fn label_style(focused: bool) -> Style {
 
 fn field_style(focused: bool) -> Style {
     if focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::White)
     }
@@ -55,13 +59,13 @@ fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect, title: &st
     let form = app.add_tx_form.as_ref().unwrap();
 
     let fields: &[(AddTxField, &str, &str)] = &[
-        (AddTxField::Date,      "Date       ", &form.date),
-        (AddTxField::Payee,     "Payee      ", &form.payee),
+        (AddTxField::Date, "Date       ", &form.date),
+        (AddTxField::Payee, "Payee      ", &form.payee),
         (AddTxField::Narration, "Narration  ", &form.narration),
-        (AddTxField::Category,  "Category   ", &form.category),
-        (AddTxField::Account,   "Account    ", &form.account),
-        (AddTxField::Amount,    "Amount     ", &form.amount),
-        (AddTxField::Currency,  "Currency   ", &form.currency),
+        (AddTxField::Category, "Category   ", &form.category),
+        (AddTxField::Account, "Account    ", &form.account),
+        (AddTxField::Amount, "Amount     ", &form.amount),
+        (AddTxField::Currency, "Currency   ", &form.currency),
     ];
 
     let mut lines: Vec<Line> = vec![Line::from("")];
@@ -71,10 +75,7 @@ fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect, title: &st
         let cursor = if focused { "█" } else { " " };
         lines.push(Line::from(vec![
             Span::styled(format!("  {}: ", label), label_style(focused)),
-            Span::styled(
-                format!("{:<32}{}", value, cursor),
-                field_style(focused),
-            ),
+            Span::styled(format!("{:<32}{}", value, cursor), field_style(focused)),
         ]));
         lines.push(Line::from(""));
     }
@@ -83,9 +84,16 @@ fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect, title: &st
     let confirm_focused = form.focused == AddTxField::Confirm;
     lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
-        if confirm_focused { "  ► [ SAVE TRANSACTION ] ◄" } else { "    [ SAVE TRANSACTION ]  " },
         if confirm_focused {
-            Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)
+            "  ► [ SAVE TRANSACTION ] ◄"
+        } else {
+            "    [ SAVE TRANSACTION ]  "
+        },
+        if confirm_focused {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Green)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::DarkGray)
         },
@@ -100,8 +108,7 @@ fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect, title: &st
     }
 
     f.render_widget(
-        Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title(title)),
+        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title)),
         area,
     );
 }
@@ -117,14 +124,13 @@ fn render_suggestions_and_help(f: &mut Frame, app: &App, area: ratatui::layout::
     // ── Suggestions ──────────────────────────────────────────────────────────
     let suggestions = form.suggestions_for_current();
     let (placeholder, pane_title) = match form.focused {
-        AddTxField::Payee =>
-            (" Start typing to see payees…", " Suggestions — Payee "),
-        AddTxField::Category =>
-            (" Start typing to see categories…", " Suggestions — Category "),
-        AddTxField::Account =>
-            (" Start typing to see accounts…", " Suggestions — Account "),
-        _ =>
-            (" (no suggestions for this field)", " Suggestions "),
+        AddTxField::Payee => (" Start typing to see payees…", " Suggestions — Payee "),
+        AddTxField::Category => (
+            " Start typing to see categories…",
+            " Suggestions — Category ",
+        ),
+        AddTxField::Account => (" Start typing to see accounts…", " Suggestions — Account "),
+        _ => (" (no suggestions for this field)", " Suggestions "),
     };
 
     let items: Vec<ListItem> = if suggestions.is_empty() {
@@ -135,10 +141,12 @@ fn render_suggestions_and_help(f: &mut Frame, app: &App, area: ratatui::layout::
     } else {
         suggestions
             .iter()
-            .map(|s| ListItem::new(Line::from(Span::styled(
-                s.as_str(),
-                Style::default().fg(Color::Cyan),
-            ))))
+            .map(|s| {
+                ListItem::new(Line::from(Span::styled(
+                    s.as_str(),
+                    Style::default().fg(Color::Cyan),
+                )))
+            })
             .collect()
     };
 
@@ -150,18 +158,54 @@ fn render_suggestions_and_help(f: &mut Frame, app: &App, area: ratatui::layout::
     // ── Help ─────────────────────────────────────────────────────────────────
     let help = Paragraph::new(vec![
         Line::from(""),
-        Line::from(Span::styled("  Navigation", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled("  Tab / ↓    Next field", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  Shift+Tab  Prev field", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  Enter      Confirm", Style::default().fg(Color::White))),
-        Line::from(Span::styled("  Esc        Cancel", Style::default().fg(Color::White))),
+        Line::from(Span::styled(
+            "  Navigation",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "  Tab / ↓    Next field",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "  Shift+Tab  Prev field",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "  Enter      Confirm",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "  Esc        Cancel",
+            Style::default().fg(Color::White),
+        )),
         Line::from(""),
-        Line::from(Span::styled("  Autocomplete (Tab)", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled("  Payee, Category, Account", Style::default().fg(Color::White))),
+        Line::from(Span::styled(
+            "  Autocomplete (Tab)",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "  Payee, Category, Account",
+            Style::default().fg(Color::White),
+        )),
         Line::from(""),
-        Line::from(Span::styled("  Double-entry", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled("  Category → Expenses:*", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("  Account  → payment src", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(
+            "  Double-entry",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "  Category → Expenses:*",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "  Account  → payment src",
+            Style::default().fg(Color::DarkGray),
+        )),
     ])
     .block(Block::default().borders(Borders::ALL).title(" Help "));
 

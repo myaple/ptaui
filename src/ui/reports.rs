@@ -19,7 +19,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_monthly(f: &mut Frame, app: &App, area: Rect) {
     let filter = app.active_account_filter();
-    let summary = app.ledger.monthly_summary(&app.config.currency, filter.as_ref());
+    let summary = app
+        .ledger
+        .monthly_summary(&app.config.currency, filter.as_ref());
 
     let filter_hint = {
         let total = app.account_filter.len();
@@ -76,14 +78,10 @@ fn render_bar_chart(
     let recent: Vec<_> = summary.iter().rev().take(12).rev().collect();
 
     let mut chart = BarChart::default()
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(format!(
-                    " Monthly Income vs Expenses ({}) — green=income  red=expenses  Tab→breakdown |{}",
-                    app.config.currency, filter_hint
-                )),
-        )
+        .block(Block::default().borders(Borders::ALL).title(format!(
+            " Monthly Income vs Expenses ({}) — green=income  red=expenses  Tab→breakdown |{}",
+            app.config.currency, filter_hint
+        )))
         .bar_width(4)
         .bar_gap(1)
         .group_gap(2);
@@ -93,18 +91,16 @@ fn render_bar_chart(
         let expense_val = expenses.to_f64().unwrap_or(0.0).max(0.0) as u64;
         let label = month.get(5..7).unwrap_or(month.as_str()).to_string();
 
-        let group = BarGroup::default()
-            .label(Line::from(label))
-            .bars(&[
-                Bar::default()
-                    .value(income_val)
-                    .style(Style::default().fg(Color::Green))
-                    .value_style(Style::default().fg(Color::Black).bg(Color::Green)),
-                Bar::default()
-                    .value(expense_val)
-                    .style(Style::default().fg(Color::Red))
-                    .value_style(Style::default().fg(Color::Black).bg(Color::Red)),
-            ]);
+        let group = BarGroup::default().label(Line::from(label)).bars(&[
+            Bar::default()
+                .value(income_val)
+                .style(Style::default().fg(Color::Green))
+                .value_style(Style::default().fg(Color::Black).bg(Color::Green)),
+            Bar::default()
+                .value(expense_val)
+                .style(Style::default().fg(Color::Red))
+                .value_style(Style::default().fg(Color::Black).bg(Color::Red)),
+        ]);
         chart = chart.data(group);
     }
 
@@ -119,7 +115,10 @@ fn render_summary_table(
     let recent: Vec<_> = summary.iter().rev().take(6).rev().collect();
 
     let header = ListItem::new(Line::from(Span::styled(
-        format!(" {:<10} {:>15} {:>15} {:>15}", "Month", "Income", "Expenses", "Net"),
+        format!(
+            " {:<10} {:>15} {:>15} {:>15}",
+            "Month", "Income", "Expenses", "Net"
+        ),
         Style::default()
             .fg(Color::Cyan)
             .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
@@ -141,7 +140,11 @@ fn render_summary_table(
             Span::styled(
                 format!(" {:>15}", crate::ui::dashboard::fmt_decimal(net)),
                 Style::default()
-                    .fg(if net >= rust_decimal::Decimal::ZERO { Color::Green } else { Color::Red })
+                    .fg(if net >= rust_decimal::Decimal::ZERO {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    })
                     .add_modifier(Modifier::BOLD),
             ),
         ])));
@@ -211,28 +214,19 @@ fn render_period_selector(
 ) {
     let label = period.label();
     let content = Line::from(vec![
-        Span::styled(
-            "  ◀ h/←  ",
-            Style::default().fg(Color::DarkGray),
-        ),
+        Span::styled("  ◀ h/←  ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             format!(" {} ", label),
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            "  l/→ ▶  ",
-            Style::default().fg(Color::DarkGray),
-        ),
+        Span::styled("  l/→ ▶  ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             format!("  [{}]", mode_label),
             Style::default().fg(Color::Yellow),
         ),
-        Span::styled(
-            "  m month  y year",
-            Style::default().fg(Color::DarkGray),
-        ),
+        Span::styled("  m month  y year", Style::default().fg(Color::DarkGray)),
         Span::styled(filter_hint, Style::default().fg(Color::Yellow)),
     ]);
 
@@ -291,7 +285,10 @@ fn render_category_list(
             let cursor_indicator = if is_cursor { " ▶ " } else { "   " };
 
             let name_style = if is_cursor {
-                Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else if is_income {
                 Style::default().fg(Color::Green)
             } else {
@@ -299,7 +296,10 @@ fn render_category_list(
             };
 
             let amt_style = if is_cursor {
-                Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(amount_color)
             };
@@ -308,10 +308,7 @@ fn render_category_list(
             // Pad category to fill available space (rough calculation)
             let line = Line::from(vec![
                 Span::styled(cursor_indicator, name_style),
-                Span::styled(
-                    format!("{:<45}", category),
-                    name_style,
-                ),
+                Span::styled(format!("{:<45}", category), name_style),
                 Span::styled(
                     format!(" {:>width$}", amt_str, width = max_amount_width),
                     amt_style,
@@ -331,34 +328,70 @@ fn render_category_list(
         String::new()
     };
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(Span::styled(
-            format!(" Categories{} ", scroll_hint),
-            Style::default().fg(Color::White),
-        ));
+    let block = Block::default().borders(Borders::ALL).title(Span::styled(
+        format!(" Categories{} ", scroll_hint),
+        Style::default().fg(Color::White),
+    ));
 
     f.render_widget(List::new(items).block(block), area);
 }
 
 fn render_breakdown_help(f: &mut Frame, area: Rect) {
     let spans = vec![
-        Span::styled(" j/k ↑↓", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " j/k ↑↓",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" navigate  "),
-        Span::styled("h/l ←→", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "h/l ←→",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" prev/next period  "),
-        Span::styled("m", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "m",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" month  "),
-        Span::styled("y", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "y",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" year  "),
-        Span::styled("Enter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Enter",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" inspect transactions  "),
-        Span::styled("Tab", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Tab",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" monthly chart  "),
-        Span::styled("c", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "c",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" filter"),
     ];
-    let para = Paragraph::new(Line::from(spans))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+    let para = Paragraph::new(Line::from(spans)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
     f.render_widget(para, area);
 }
