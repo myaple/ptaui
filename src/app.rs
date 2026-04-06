@@ -833,9 +833,15 @@ impl App {
             return;
         }
 
-        // Build the same sorted order used by the transactions UI (reverse chrono).
+        // Build the same sorted+filtered order used by the transactions UI (reverse chrono).
+        let filter = self.active_tx_account_filter();
         let mut sorted: Vec<&crate::beancount::parser::Transaction> =
-            self.ledger.transactions.iter().collect();
+            self.ledger.transactions.iter()
+                .filter(|txn| match &filter {
+                    None => true,
+                    Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+                })
+                .collect();
         sorted.sort_by(|a, b| b.date.cmp(&a.date));
 
         let selected = self.tx_selected.min(sorted.len().saturating_sub(1));
