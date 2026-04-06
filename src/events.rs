@@ -873,6 +873,11 @@ fn handle_csv_file_path(app: &mut App, key: KeyEvent) -> Result<()> {
                 }
             }
         }
+        KeyCode::Tab => {
+            // Filesystem path tab-completion
+            let completed = tab_complete_path(&state.file_path);
+            state.file_path = completed;
+        }
         KeyCode::Backspace => {
             state.file_path.pop();
         }
@@ -882,6 +887,103 @@ fn handle_csv_file_path(app: &mut App, key: KeyEvent) -> Result<()> {
         _ => {}
     }
     Ok(())
+}
+
+/// Tab-complete a filesystem path. Expands `~`, finds matching entries in the
+/// parent directory, and completes to the longest common prefix. If there's a
+/// single match and it's a directory, appends `/`.
+fn tab_complete_path(input: &str) -> String {
+    let expanded = if let Some(stripped) = input.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            home.join(stripped).to_string_lossy().to_string()
+        } else {
+            input.to_string()
+        }
+    } else if input == "~" {
+        if let Some(home) = dirs::home_dir() {
+            home.to_string_lossy().to_string()
+        } else {
+            input.to_string()
+        }
+    } else {
+        input.to_string()
+    };
+
+    let path = std::path::Path::new(&expanded);
+
+    // Determine the directory to list and the prefix to match
+    let (dir, prefix) = if path.is_dir() && expanded.ends_with('/') {
+        (path.to_path_buf(), String::new())
+    } else {
+        let dir = path.parent().unwrap_or(std::path::Path::new("."));
+        let prefix = path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
+        (dir.to_path_buf(), prefix)
+    };
+
+    // Read directory entries matching the prefix
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(rd) => rd,
+        Err(_) => return input.to_string(),
+    };
+
+    let mut matches: Vec<String> = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(&prefix) {
+            matches.push(name);
+        }
+    }
+
+    if matches.is_empty() {
+        return input.to_string();
+    }
+
+    matches.sort();
+
+    // Find longest common prefix among matches
+    let lcp = longest_common_prefix(&matches);
+
+    // Build the completed path
+    let completed_path = dir.join(&lcp);
+    let mut result = completed_path.to_string_lossy().to_string();
+
+    // If single match and it's a directory, append /
+    if matches.len() == 1 && completed_path.is_dir() && !result.ends_with('/') {
+        result.push('/');
+    }
+
+    // Restore ~/  prefix if original input used it
+    if input.starts_with("~/") || input == "~" {
+        if let Some(home) = dirs::home_dir() {
+            let home_str = home.to_string_lossy().to_string();
+            if let Some(rest) = result.strip_prefix(&home_str) {
+                return format!("~{}", rest);
+            }
+        }
+    }
+
+    result
+}
+
+fn longest_common_prefix(strings: &[String]) -> String {
+    if strings.is_empty() {
+        return String::new();
+    }
+    let first = &strings[0];
+    let mut len = first.len();
+    for s in &strings[1..] {
+        len = len.min(s.len());
+        for (i, (a, b)) in first.chars().zip(s.chars()).enumerate() {
+            if a != b {
+                len = len.min(i);
+                break;
+            }
+        }
+    }
+    first[..len].to_string()
 }
 
 fn handle_csv_account_select(app: &mut App, key: KeyEvent) -> Result<()> {
