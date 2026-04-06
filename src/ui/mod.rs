@@ -3,6 +3,7 @@ pub mod add_account;
 pub mod add_tx;
 pub mod category_transactions;
 pub mod dashboard;
+pub mod delete_tx;
 pub mod reports;
 pub mod startup;
 pub mod transactions;
@@ -52,6 +53,7 @@ pub fn render(f: &mut Frame, app: &App) {
         Some(Modal::AccountFilter) => account_filter::render_modal(f, app),
         Some(Modal::CategoryTransactions) => category_transactions::render_modal(f, app),
         Some(Modal::TxAccountFilter) => tx_account_filter::render_modal(f, app),
+        Some(Modal::DeleteTransaction) => delete_tx::render_modal(f, app),
         None => {}
     }
 }
@@ -90,7 +92,7 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
         let file = app.config.resolved_beancount_file();
         if app.screen == Screen::Transactions && !app.ledger.transactions.is_empty() {
             format!(
-                " {} | q quit  1-3 screens  a add  e edit  f filter  r reload",
+                " {} | q quit  1-3 screens  a add  e edit  d delete  f filter  r reload",
                 file.display()
             )
         } else {

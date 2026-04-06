@@ -32,6 +32,8 @@ pub enum Modal {
     CategoryTransactions,
     /// Account filter for the transaction list view.
     TxAccountFilter,
+    /// Confirmation prompt before deleting the selected transaction.
+    DeleteTransaction,
 }
 
 // ── Reports view state ────────────────────────────────────────────────────────
@@ -491,6 +493,8 @@ pub struct App {
     pub tx_account_filter_cursor: usize,
     /// Scroll offset inside the tx account filter modal list.
     pub tx_account_filter_scroll: usize,
+    /// True = "Yes" selected in the delete-transaction confirmation modal.
+    pub delete_tx_confirm: bool,
 }
 
 impl App {
@@ -529,6 +533,7 @@ impl App {
             tx_account_filter: Vec::new(),
             tx_account_filter_cursor: 0,
             tx_account_filter_scroll: 0,
+            delete_tx_confirm: true,
         };
         app.rebuild_account_filter();
         app.rebuild_tx_account_filter();
@@ -799,6 +804,9 @@ impl App {
             Modal::TxAccountFilter => {
                 self.rebuild_tx_account_filter();
             }
+            Modal::DeleteTransaction => {
+                self.delete_tx_confirm = true; // default to Yes
+            }
             Modal::EditTransaction => {
                 // Opened via open_edit_tx_modal() which sets up form state directly.
             }
@@ -881,6 +889,45 @@ impl App {
         self.edit_tx_orig_line = Some(txn.line);
         self.add_tx_form = Some(form);
         self.modal = Some(Modal::EditTransaction);
+    }
+
+    /// Delete the currently selected transaction from the beancount file.
+    pub fn commit_delete_transaction(&mut self) -> Result<()> {
+        if self.ledger.transactions.is_empty() {
+            return Ok(());
+        }
+
+        let filter = self.active_tx_account_filter();
+        let mut sorted: Vec<&crate::beancount::parser::Transaction> =
+            self.ledger.transactions.iter()
+                .filter(|txn| match &filter {
+                    None => true,
+                    Some(set) => txn.postings.iter().any(|p| set.contains(&p.account)),
+                })
+                .collect();
+        sorted.sort_by(|a, b| b.date.cmp(&a.date));
+
+        if sorted.is_empty() {
+            return Ok(());
+        }
+
+        let selected = self.tx_selected.min(sorted.len().saturating_sub(1));
+        let line = sorted[selected].line;
+
+        let path = self.config.resolved_beancount_file();
+        crate::beancount::writer::delete_transaction(&path, line)?;
+        self.reload_ledger()?;
+
+        // Clamp cursor after deletion
+        let new_len = self.ledger.transactions.len();
+        if new_len == 0 {
+            self.tx_selected = 0;
+            self.tx_scroll = 0;
+        } else if self.tx_selected >= new_len {
+            self.tx_selected = new_len - 1;
+        }
+
+        Ok(())
     }
 
     /// Commit the current add_account_form to the beancount file.
