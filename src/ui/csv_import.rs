@@ -86,7 +86,7 @@ pub fn render_modal(f: &mut Frame, app: &App) {
         f.render_widget(err_para, inner[2]);
     } else {
         let hint = match state.step {
-            CsvImportStep::FilePath => "Enter: load file  |  Esc: cancel",
+            CsvImportStep::FilePath => "Tab: complete path  |  Enter: load file  |  Esc: cancel",
             CsvImportStep::AccountSelect => "Tab: autocomplete  |  Enter: next  |  Esc: back",
             CsvImportStep::ColumnMapping => {
                 "Left/Right: change column  |  Tab/Down: next field  |  Enter: parse & review  |  Esc: back"
@@ -149,6 +149,10 @@ fn render_file_path(f: &mut Frame, app: &App, area: Rect) {
         )),
         Line::from(Span::styled(
             "  Tip: use ~/path/to/file.csv for home directory",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "  Tab to autocomplete path",
             Style::default().fg(Color::DarkGray),
         )),
     ]);
