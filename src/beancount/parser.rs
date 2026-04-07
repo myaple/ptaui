@@ -187,6 +187,104 @@ impl Ledger {
         result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         result.into_iter().map(|(txn, _)| txn).collect()
     }
+
+    /// Compute net worth (Assets + Liabilities) at the end of each month.
+    /// Returns sorted `(YYYY-MM, net_worth)` for the given currency.
+    pub fn net_worth_history(&self, currency: &str) -> Vec<(String, Decimal)> {
+        use chrono::Datelike;
+
+        if self.transactions.is_empty() {
+            return Vec::new();
+        }
+
+        // Find the first and last transaction dates
+        let first_date = self
+            .transactions
+            .iter()
+            .map(|t| t.date)
+            .min()
+            .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
+        let last_date = self
+            .transactions
+            .iter()
+            .map(|t| t.date)
+            .max()
+            .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
+
+        // Build a sorted list of months to cover
+        let mut months: Vec<String> = Vec::new();
+        let mut y = first_date.year();
+        let mut m = first_date.month();
+        loop {
+            months.push(format!("{:04}-{:02}", y, m));
+            if y == last_date.year() && m == last_date.month() {
+                break;
+            }
+            m += 1;
+            if m > 12 {
+                m = 1;
+                y += 1;
+            }
+        }
+
+        // Accumulate per-month net worth changes, then compute cumulative
+        let mut monthly_delta: HashMap<String, Decimal> = HashMap::new();
+        for txn in &self.transactions {
+            let key = txn.date.format("%Y-%m").to_string();
+            for posting in &txn.postings {
+                if let (Some(amount), Some(cur)) = (&posting.amount, &posting.currency) {
+                    if cur != currency {
+                        continue;
+                    }
+                    let acct = &posting.account;
+                    if acct.starts_with("Assets") || acct.starts_with("Liabilities") {
+                        *monthly_delta.entry(key.clone()).or_insert(Decimal::ZERO) += amount;
+                    }
+                }
+            }
+        }
+
+        // Build cumulative result
+        let mut net = Decimal::ZERO;
+        months
+            .into_iter()
+            .map(|month| {
+                net += monthly_delta.get(&month).copied().unwrap_or(Decimal::ZERO);
+                (month, net)
+            })
+            .collect()
+    }
+
+    /// For a given category account, return the per-month totals sorted chronologically.
+    /// Expenses:* amounts are positive; Income:* amounts are positive (negated).
+    pub fn category_trend(&self, currency: &str, category: &str) -> Vec<(String, Decimal)> {
+        let mut map: HashMap<String, Decimal> = HashMap::new();
+        let is_income = category.starts_with("Income");
+
+        for txn in &self.transactions {
+            for posting in &txn.postings {
+                if posting.account != category {
+                    continue;
+                }
+                let cur = posting.currency.as_deref().unwrap_or("");
+                if cur != currency {
+                    continue;
+                }
+                if let Some(amount) = posting.amount {
+                    let key = txn.date.format("%Y-%m").to_string();
+                    if is_income {
+                        *map.entry(key).or_insert(Decimal::ZERO) += -amount;
+                    } else {
+                        *map.entry(key).or_insert(Decimal::ZERO) += amount;
+                    }
+                }
+            }
+        }
+
+        let mut result: Vec<(String, Decimal)> = map.into_iter().collect();
+        result.sort_by(|a, b| a.0.cmp(&b.0));
+        result
+    }
 }
 
 pub fn parse(source: &str) -> Result<Ledger> {

@@ -48,6 +48,8 @@ pub enum ReportsView {
     Monthly,
     /// Per-category breakdown for a specific period.
     Breakdown,
+    /// Net worth over time with category trend drill-down.
+    NetWorth,
 }
 
 /// The time period shown in the category breakdown view.
@@ -487,7 +489,6 @@ pub enum CsvMappingField {
     Negate,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct CsvImportState {
     pub step: CsvImportStep,
@@ -626,6 +627,10 @@ pub struct App {
     pub breakdown_cursor: usize,
     /// Scroll offset for the breakdown list.
     pub breakdown_scroll: usize,
+    /// Cursor for the category list in the NetWorth view.
+    pub networth_cursor: usize,
+    /// Scroll offset for the category list in the NetWorth view.
+    pub networth_scroll: usize,
     /// The category name currently open in the CategoryTransactions modal.
     pub category_tx_category: String,
     /// Scroll offset inside the category transactions modal.
@@ -678,6 +683,8 @@ impl App {
             breakdown_period: BreakdownPeriod::current_month(),
             breakdown_cursor: 0,
             breakdown_scroll: 0,
+            networth_cursor: 0,
+            networth_scroll: 0,
             category_tx_category: String::new(),
             category_tx_scroll: 0,
             category_tx_cursor: 0,

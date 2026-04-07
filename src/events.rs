@@ -67,7 +67,8 @@ pub fn handle_event(app: &mut App, event: Event) -> Result<()> {
             KeyCode::Tab if app.screen == Screen::Reports => {
                 app.reports_view = match app.reports_view {
                     ReportsView::Monthly => ReportsView::Breakdown,
-                    ReportsView::Breakdown => ReportsView::Monthly,
+                    ReportsView::Breakdown => ReportsView::NetWorth,
+                    ReportsView::NetWorth => ReportsView::Monthly,
                 };
                 return Ok(());
             }
@@ -693,10 +694,14 @@ fn handle_tx_account_filter(app: &mut App, key: KeyEvent) -> Result<()> {
 // ── Screen: Reports ───────────────────────────────────────────────────────────
 
 fn handle_reports(app: &mut App, key: KeyEvent) {
-    if app.reports_view != ReportsView::Breakdown {
-        return;
+    match app.reports_view {
+        ReportsView::Breakdown => handle_breakdown(app, key),
+        ReportsView::NetWorth => handle_net_worth(app, key),
+        ReportsView::Monthly => {}
     }
+}
 
+fn handle_breakdown(app: &mut App, key: KeyEvent) {
     const VISIBLE: usize = 20;
 
     let filter = app.active_account_filter();
@@ -763,6 +768,84 @@ fn handle_reports(app: &mut App, key: KeyEvent) {
                     filter.as_ref(),
                 );
                 if let Some((category, _)) = bd.get(app.breakdown_cursor) {
+                    app.category_tx_category = category.clone();
+                    app.category_tx_cursor = 0;
+                    app.category_tx_scroll = 0;
+                    app.open_modal(Modal::CategoryTransactions);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn handle_net_worth(app: &mut App, key: KeyEvent) {
+    const VISIBLE: usize = 16;
+
+    let filter = app.active_account_filter();
+    let period = app.breakdown_period.clone();
+    let breakdown_len = app
+        .ledger
+        .category_breakdown(
+            &app.config.currency,
+            period.start(),
+            period.end(),
+            filter.as_ref(),
+        )
+        .len();
+
+    match key.code {
+        // Period navigation
+        KeyCode::Left | KeyCode::Char('h') => {
+            app.breakdown_period = app.breakdown_period.prev();
+            app.networth_cursor = 0;
+            app.networth_scroll = 0;
+        }
+        KeyCode::Right | KeyCode::Char('l') => {
+            app.breakdown_period = app.breakdown_period.next();
+            app.networth_cursor = 0;
+            app.networth_scroll = 0;
+        }
+        // Switch period mode
+        KeyCode::Char('m') => {
+            app.breakdown_period = app.breakdown_period.as_month();
+            app.networth_cursor = 0;
+            app.networth_scroll = 0;
+        }
+        KeyCode::Char('y') => {
+            app.breakdown_period = app.breakdown_period.as_year();
+            app.networth_cursor = 0;
+            app.networth_scroll = 0;
+        }
+        // Category list navigation
+        KeyCode::Down | KeyCode::Char('j') => {
+            if breakdown_len > 0 && app.networth_cursor + 1 < breakdown_len {
+                app.networth_cursor += 1;
+                if app.networth_cursor >= app.networth_scroll + VISIBLE {
+                    app.networth_scroll = app.networth_cursor - VISIBLE + 1;
+                }
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.networth_cursor > 0 {
+                app.networth_cursor -= 1;
+                if app.networth_cursor < app.networth_scroll {
+                    app.networth_scroll = app.networth_cursor;
+                }
+            }
+        }
+        // Open category transactions modal
+        KeyCode::Enter => {
+            if breakdown_len > 0 {
+                let filter = app.active_account_filter();
+                let period = app.breakdown_period.clone();
+                let bd = app.ledger.category_breakdown(
+                    &app.config.currency,
+                    period.start(),
+                    period.end(),
+                    filter.as_ref(),
+                );
+                if let Some((category, _)) = bd.get(app.networth_cursor) {
                     app.category_tx_category = category.clone();
                     app.category_tx_cursor = 0;
                     app.category_tx_scroll = 0;
@@ -1107,7 +1190,8 @@ fn handle_csv_column_mapping(app: &mut App, key: KeyEvent) -> Result<()> {
                     state.credit_col = Some(if col == 0 { num_cols - 1 } else { col - 1 });
                 }
             }
-            CsvMappingField::AmountMode | CsvMappingField::DateFormat | CsvMappingField::Negate => {}
+            CsvMappingField::AmountMode | CsvMappingField::DateFormat | CsvMappingField::Negate => {
+            }
         },
         KeyCode::Right => match state.mapping_focused {
             CsvMappingField::Date => {
@@ -1129,7 +1213,8 @@ fn handle_csv_column_mapping(app: &mut App, key: KeyEvent) -> Result<()> {
                     state.credit_col = Some((col + 1) % num_cols);
                 }
             }
-            CsvMappingField::AmountMode | CsvMappingField::DateFormat | CsvMappingField::Negate => {}
+            CsvMappingField::AmountMode | CsvMappingField::DateFormat | CsvMappingField::Negate => {
+            }
         },
         KeyCode::Char(' ') if state.mapping_focused == CsvMappingField::AmountMode => {
             state.use_debit_credit = !state.use_debit_credit;
@@ -1147,7 +1232,11 @@ fn handle_csv_column_mapping(app: &mut App, key: KeyEvent) -> Result<()> {
         }
         KeyCode::Char(' ') if state.mapping_focused == CsvMappingField::Credit => {
             if state.use_debit_credit {
-                state.credit_col = if state.credit_col.is_some() { None } else { Some(0) };
+                state.credit_col = if state.credit_col.is_some() {
+                    None
+                } else {
+                    Some(0)
+                };
             }
         }
         KeyCode::Backspace if state.mapping_focused == CsvMappingField::DateFormat => {
@@ -1162,8 +1251,16 @@ fn handle_csv_column_mapping(app: &mut App, key: KeyEvent) -> Result<()> {
                 date_col: state.date_col,
                 payee_col: state.payee_col,
                 amount_col: state.amount_col,
-                debit_col: if state.use_debit_credit { state.debit_col } else { None },
-                credit_col: if state.use_debit_credit { state.credit_col } else { None },
+                debit_col: if state.use_debit_credit {
+                    state.debit_col
+                } else {
+                    None
+                },
+                credit_col: if state.use_debit_credit {
+                    state.credit_col
+                } else {
+                    None
+                },
             };
             match crate::beancount::csv::parse_rows(
                 &state.raw_rows,
