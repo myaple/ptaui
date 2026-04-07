@@ -479,6 +479,7 @@ pub enum CsvImportStep {
 pub enum CsvMappingField {
     Date,
     Payee,
+    AmountMode,
     Amount,
     Debit,
     Credit,
@@ -486,31 +487,6 @@ pub enum CsvMappingField {
     Negate,
 }
 
-impl CsvMappingField {
-    pub fn next(&self) -> Self {
-        match self {
-            Self::Date => Self::Payee,
-            Self::Payee => Self::Amount,
-            Self::Amount => Self::Debit,
-            Self::Debit => Self::Credit,
-            Self::Credit => Self::DateFormat,
-            Self::DateFormat => Self::Negate,
-            Self::Negate => Self::Date,
-        }
-    }
-
-    pub fn prev(&self) -> Self {
-        match self {
-            Self::Date => Self::Negate,
-            Self::Payee => Self::Date,
-            Self::Amount => Self::Payee,
-            Self::Debit => Self::Amount,
-            Self::Credit => Self::Debit,
-            Self::DateFormat => Self::Credit,
-            Self::Negate => Self::DateFormat,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct CsvImportState {
@@ -523,6 +499,7 @@ pub struct CsvImportState {
     pub date_col: usize,
     pub payee_col: usize,
     pub amount_col: usize,
+    pub use_debit_credit: bool,
     pub debit_col: Option<usize>,
     pub credit_col: Option<usize>,
     pub mapping_focused: CsvMappingField,
@@ -548,6 +525,7 @@ impl CsvImportState {
             date_col: 0,
             payee_col: 1,
             amount_col: 2,
+            use_debit_credit: false,
             debit_col: None,
             credit_col: None,
             mapping_focused: CsvMappingField::Date,

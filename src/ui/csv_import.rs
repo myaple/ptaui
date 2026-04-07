@@ -241,11 +241,13 @@ fn render_account_select(f: &mut Frame, app: &App, area: Rect) {
 fn render_column_mapping(f: &mut Frame, app: &App, area: Rect) {
     let state = app.csv_import_state.as_ref().unwrap();
 
+    // Height: 1 blank + 2 per field + 2 borders. Single-amount = 6 fields = 15, debit/credit = 7 = 17.
+    let mapping_height = if state.use_debit_credit { 17u16 } else { 15u16 };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(16), // mapping fields
-            Constraint::Min(1),     // preview table
+            Constraint::Length(mapping_height), // mapping fields
+            Constraint::Min(1),                 // preview table
         ])
         .split(area);
 
@@ -286,7 +288,7 @@ fn render_column_mapping(f: &mut Frame, app: &App, area: Rect) {
         }
     };
 
-    let mappings: Vec<(CsvMappingField, &str, String, String)> = vec![
+    let mut mappings: Vec<(CsvMappingField, &str, String, String)> = vec![
         (
             CsvMappingField::Date,
             "Date Column   ",
@@ -300,60 +302,65 @@ fn render_column_mapping(f: &mut Frame, app: &App, area: Rect) {
             format!("e.g. {}", sample(state.payee_col)),
         ),
         (
-            CsvMappingField::Amount,
-            "Amount Column ",
-            col_name(state.amount_col),
-            if state.debit_col.is_some() {
-                "(ignored when Debit column is set)".to_string()
+            CsvMappingField::AmountMode,
+            "Amount Mode   ",
+            if state.use_debit_credit {
+                "[Debit + Credit]".to_string()
             } else {
-                format!("e.g. {}", sample(state.amount_col))
+                "[Single Amount] ".to_string()
             },
+            "Space to toggle".to_string(),
         ),
-        (
+    ];
+
+    if state.use_debit_credit {
+        mappings.push((
             CsvMappingField::Debit,
             "Debit Column  ",
             col_name_opt(state.debit_col),
-            if state.debit_col.is_none() {
-                "Space to enable (replaces Amount column)".to_string()
-            } else {
-                format!(
-                    "\u{25C0} \u{25B6} select column  e.g. {}",
-                    sample(state.debit_col.unwrap())
-                )
-            },
-        ),
-        (
+            state
+                .debit_col
+                .map(|c| format!("e.g. {}", sample(c)))
+                .unwrap_or_default(),
+        ));
+        mappings.push((
             CsvMappingField::Credit,
             "Credit Column ",
             col_name_opt(state.credit_col),
-            if state.debit_col.is_none() {
-                "(enable Debit column first)".to_string()
-            } else if state.credit_col.is_none() {
+            if state.credit_col.is_none() {
                 "Space to enable (optional)".to_string()
             } else {
-                format!(
-                    "\u{25C0} \u{25B6} select column  e.g. {}",
-                    sample(state.credit_col.unwrap())
-                )
+                state
+                    .credit_col
+                    .map(|c| format!("e.g. {}", sample(c)))
+                    .unwrap_or_default()
             },
-        ),
-        (
-            CsvMappingField::DateFormat,
-            "Date Format   ",
-            format!("{}\u{2588}", &state.date_format),
-            "e.g. %m/%d/%Y or %Y-%m-%d".to_string(),
-        ),
-        (
-            CsvMappingField::Negate,
-            "Negate Amounts",
-            if state.negate_amounts {
-                "[x]".to_string()
-            } else {
-                "[ ]".to_string()
-            },
-            "Space to toggle, flip +/- signs".to_string(),
-        ),
-    ];
+        ));
+    } else {
+        mappings.push((
+            CsvMappingField::Amount,
+            "Amount Column ",
+            col_name(state.amount_col),
+            format!("e.g. {}", sample(state.amount_col)),
+        ));
+    }
+
+    mappings.push((
+        CsvMappingField::DateFormat,
+        "Date Format   ",
+        format!("{}\u{2588}", &state.date_format),
+        "e.g. %m/%d/%Y or %Y-%m-%d".to_string(),
+    ));
+    mappings.push((
+        CsvMappingField::Negate,
+        "Negate Amounts",
+        if state.negate_amounts {
+            "[x]".to_string()
+        } else {
+            "[ ]".to_string()
+        },
+        "Space to toggle, flip +/- signs".to_string(),
+    ));
 
     let mut lines: Vec<Line> = vec![Line::from("")];
     for (field, label, value, hint) in &mappings {
@@ -361,18 +368,13 @@ fn render_column_mapping(f: &mut Frame, app: &App, area: Rect) {
         let arrow = if is_focused
             && matches!(
                 field,
-                CsvMappingField::Date | CsvMappingField::Payee | CsvMappingField::Amount
+                CsvMappingField::Date
+                    | CsvMappingField::Payee
+                    | CsvMappingField::Amount
+                    | CsvMappingField::Debit
             ) {
             "\u{25C0} \u{25B6} "
-        } else if is_focused
-            && *field == CsvMappingField::Debit
-            && state.debit_col.is_some()
-        {
-            "\u{25C0} \u{25B6} "
-        } else if is_focused
-            && *field == CsvMappingField::Credit
-            && state.credit_col.is_some()
-        {
+        } else if is_focused && *field == CsvMappingField::Credit && state.credit_col.is_some() {
             "\u{25C0} \u{25B6} "
         } else {
             "  "
@@ -414,9 +416,8 @@ fn render_csv_preview(f: &mut Frame, state: &crate::app::CsvImportState, area: R
         .iter()
         .enumerate()
         .map(|(i, h)| {
-            let is_debit = state.debit_col == Some(i);
-            let is_credit = state.credit_col == Some(i);
-            let use_debit_credit = state.debit_col.is_some();
+            let is_debit = state.use_debit_credit && state.debit_col == Some(i);
+            let is_credit = state.use_debit_credit && state.credit_col == Some(i);
             let style = if i == state.date_col || i == state.payee_col {
                 Style::default()
                     .fg(Color::Cyan)
@@ -425,7 +426,7 @@ fn render_csv_preview(f: &mut Frame, state: &crate::app::CsvImportState, area: R
                 Style::default()
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD)
-            } else if !use_debit_credit && i == state.amount_col {
+            } else if !state.use_debit_credit && i == state.amount_col {
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD)
