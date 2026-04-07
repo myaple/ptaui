@@ -99,7 +99,7 @@ pub fn render_modal(f: &mut Frame, app: &App) {
                 if state.editing_category {
                     "Tab: autocomplete  |  Enter/Esc: done editing"
                 } else {
-                    "j/k: navigate  |  Space: toggle  |  e/Tab: edit category  |  c: apply cat to same payee  |  Enter: import  |  Esc: back"
+                    "j/k: navigate  |  Space: toggle  |  e/Tab: edit category  |  c: apply cat  |  f: filter  |  s: sort  |  Enter: import  |  Esc: back"
                 }
             }
         };
@@ -486,6 +486,8 @@ fn render_review(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_review_table(f: &mut Frame, state: &crate::app::CsvImportState, area: Rect) {
+    let visible = state.visible_indices();
+
     let widths = [
         Constraint::Length(3),  // checkbox
         Constraint::Length(12), // date
@@ -524,14 +526,14 @@ fn render_review_table(f: &mut Frame, state: &crate::app::CsvImportState, area: 
     .bottom_margin(1);
 
     let visible_rows = area.height.saturating_sub(4) as usize; // borders + header + margin
-    let rows: Vec<Row> = state
-        .rows
+    let rows: Vec<Row> = visible
         .iter()
         .enumerate()
         .skip(state.scroll)
         .take(visible_rows)
-        .map(|(i, row)| {
-            let is_selected = i == state.cursor;
+        .map(|(vis_idx, &row_idx)| {
+            let row = &state.rows[row_idx];
+            let is_selected = vis_idx == state.cursor;
             let is_dup = row.is_duplicate;
 
             let base_style = if is_selected {
@@ -587,10 +589,17 @@ fn render_review_table(f: &mut Frame, state: &crate::app::CsvImportState, area: 
         .filter(|r| r.include && r.category.is_empty())
         .count();
 
-    let title = format!(
-        " Transactions: {} selected / {} total | {} duplicates | {} need category ",
+    let mut title = format!(
+        " Transactions: {} selected / {} total | {} duplicates | {} need category",
         included, total, dups, no_cat
     );
+    if state.filter_no_category {
+        title.push_str(" | FILTER: no category");
+    }
+    if state.sort_by_category {
+        title.push_str(" | SORT: category");
+    }
+    title.push(' ');
 
     let table = Table::new(rows, &widths)
         .header(header)
@@ -687,6 +696,42 @@ fn render_review_sidebar(f: &mut Frame, state: &crate::app::CsvImportState, area
                 "  C      Overwrite cat for payee",
                 Style::default().fg(Color::White),
             )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  View",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                if state.filter_no_category {
+                    "  f      Filter: ON (no category)"
+                } else {
+                    "  f      Filter: OFF"
+                },
+                if state.filter_no_category {
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                },
+            )),
+            Line::from(Span::styled(
+                if state.sort_by_category {
+                    "  s      Sort: category"
+                } else {
+                    "  s      Sort: date"
+                },
+                if state.sort_by_category {
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                },
+            )),
+            Line::from(""),
             Line::from(Span::styled(
                 "  Enter  Import selected",
                 Style::default().fg(Color::White),

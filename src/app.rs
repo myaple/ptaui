@@ -512,6 +512,8 @@ pub struct CsvImportState {
     pub category_suggestions: Vec<String>,
     pub error: Option<String>,
     pub editing_category: bool,
+    pub filter_no_category: bool,
+    pub sort_by_category: bool,
 }
 
 impl CsvImportState {
@@ -538,6 +540,8 @@ impl CsvImportState {
             category_suggestions,
             error: None,
             editing_category: false,
+            filter_no_category: false,
+            sort_by_category: false,
         }
     }
 
@@ -560,27 +564,54 @@ impl CsvImportState {
             .collect()
     }
 
+    /// Returns row indices that pass the current filter, in display order.
+    pub fn visible_indices(&self) -> Vec<usize> {
+        let mut indices: Vec<usize> = (0..self.rows.len())
+            .filter(|&i| {
+                if self.filter_no_category {
+                    self.rows[i].category.is_empty()
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        if self.sort_by_category {
+            indices.sort_by(|&a, &b| {
+                self.rows[a]
+                    .category
+                    .cmp(&self.rows[b].category)
+                    .then_with(|| self.rows[a].date.cmp(&self.rows[b].date))
+            });
+        }
+
+        indices
+    }
+
     /// Filter category suggestions for the current row.
     pub fn filtered_category_suggestions(&self) -> Vec<&str> {
-        if let Some(row) = self.rows.get(self.cursor) {
-            if row.category.is_empty() {
+        let actual_idx = self.visible_indices().get(self.cursor).copied();
+        if let Some(row_idx) = actual_idx {
+            if let Some(row) = self.rows.get(row_idx) {
+                if row.category.is_empty() {
+                    return self
+                        .category_suggestions
+                        .iter()
+                        .map(|s| s.as_str())
+                        .take(10)
+                        .collect();
+                }
+                let lower = row.category.to_lowercase();
                 return self
                     .category_suggestions
                     .iter()
+                    .filter(|s| s.to_lowercase().contains(&lower))
                     .map(|s| s.as_str())
                     .take(10)
                     .collect();
             }
-            let lower = row.category.to_lowercase();
-            self.category_suggestions
-                .iter()
-                .filter(|s| s.to_lowercase().contains(&lower))
-                .map(|s| s.as_str())
-                .take(10)
-                .collect()
-        } else {
-            Vec::new()
         }
+        Vec::new()
     }
 
     /// Number of columns in the CSV.

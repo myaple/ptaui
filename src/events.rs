@@ -1334,6 +1334,7 @@ fn handle_csv_review(app: &mut App, key: KeyEvent) -> Result<()> {
 
     // If editing category, handle text input
     if state.editing_category {
+        let actual_idx = state.visible_indices().get(state.cursor).copied();
         match key.code {
             KeyCode::Esc => {
                 state.editing_category = false;
@@ -1347,23 +1348,27 @@ fn handle_csv_review(app: &mut App, key: KeyEvent) -> Result<()> {
                     .filtered_category_suggestions()
                     .first()
                     .map(|s| s.to_string());
-                if let (Some(suggestion), Some(row)) =
-                    (first_suggestion, state.rows.get_mut(state.cursor))
-                {
-                    if row.category != suggestion {
-                        row.category = suggestion;
+                if let (Some(suggestion), Some(row_idx)) = (first_suggestion, actual_idx) {
+                    if let Some(row) = state.rows.get_mut(row_idx) {
+                        if row.category != suggestion {
+                            row.category = suggestion;
+                        }
                     }
                 }
                 state.editing_category = false;
             }
             KeyCode::Backspace => {
-                if let Some(row) = state.rows.get_mut(state.cursor) {
-                    row.category.pop();
+                if let Some(row_idx) = actual_idx {
+                    if let Some(row) = state.rows.get_mut(row_idx) {
+                        row.category.pop();
+                    }
                 }
             }
             KeyCode::Char(c) => {
-                if let Some(row) = state.rows.get_mut(state.cursor) {
-                    row.category.push(c);
+                if let Some(row_idx) = actual_idx {
+                    if let Some(row) = state.rows.get_mut(row_idx) {
+                        row.category.push(c);
+                    }
                 }
             }
             _ => {}
@@ -1371,12 +1376,18 @@ fn handle_csv_review(app: &mut App, key: KeyEvent) -> Result<()> {
         return Ok(());
     }
 
+    // Compute visible indices for navigation
+    let visible = app.csv_import_state.as_ref().unwrap().visible_indices();
+    let visible_len = visible.len();
+
+    let state = app.csv_import_state.as_mut().unwrap();
+
     match key.code {
         KeyCode::Esc => {
             state.step = CsvImportStep::ColumnMapping;
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if !state.rows.is_empty() && state.cursor < state.rows.len() - 1 {
+            if visible_len > 0 && state.cursor + 1 < visible_len {
                 state.cursor += 1;
                 if state.cursor >= state.scroll + CSV_REVIEW_PAGE {
                     state.scroll = state.cursor - CSV_REVIEW_PAGE + 1;
@@ -1393,8 +1404,10 @@ fn handle_csv_review(app: &mut App, key: KeyEvent) -> Result<()> {
         }
         KeyCode::Char(' ') => {
             // Toggle include/exclude
-            if let Some(row) = state.rows.get_mut(state.cursor) {
-                row.include = !row.include;
+            if let Some(&row_idx) = visible.get(state.cursor) {
+                if let Some(row) = state.rows.get_mut(row_idx) {
+                    row.include = !row.include;
+                }
             }
         }
         KeyCode::Char('e') | KeyCode::Tab => {
@@ -1403,13 +1416,15 @@ fn handle_csv_review(app: &mut App, key: KeyEvent) -> Result<()> {
         }
         KeyCode::Char('c') => {
             // Apply category from current row to all rows with same payee that have no category
-            if let Some(current) = state.rows.get(state.cursor) {
-                let payee = current.payee.to_lowercase();
-                let category = current.category.clone();
-                if !category.is_empty() {
-                    for row in &mut state.rows {
-                        if row.payee.to_lowercase() == payee && row.category.is_empty() {
-                            row.category = category.clone();
+            if let Some(&row_idx) = visible.get(state.cursor) {
+                if let Some(current) = state.rows.get(row_idx) {
+                    let payee = current.payee.to_lowercase();
+                    let category = current.category.clone();
+                    if !category.is_empty() {
+                        for row in &mut state.rows {
+                            if row.payee.to_lowercase() == payee && row.category.is_empty() {
+                                row.category = category.clone();
+                            }
                         }
                     }
                 }
@@ -1417,17 +1432,31 @@ fn handle_csv_review(app: &mut App, key: KeyEvent) -> Result<()> {
         }
         KeyCode::Char('C') => {
             // Apply category from current row to ALL rows with same payee
-            if let Some(current) = state.rows.get(state.cursor) {
-                let payee = current.payee.to_lowercase();
-                let category = current.category.clone();
-                if !category.is_empty() {
-                    for row in &mut state.rows {
-                        if row.payee.to_lowercase() == payee {
-                            row.category = category.clone();
+            if let Some(&row_idx) = visible.get(state.cursor) {
+                if let Some(current) = state.rows.get(row_idx) {
+                    let payee = current.payee.to_lowercase();
+                    let category = current.category.clone();
+                    if !category.is_empty() {
+                        for row in &mut state.rows {
+                            if row.payee.to_lowercase() == payee {
+                                row.category = category.clone();
+                            }
                         }
                     }
                 }
             }
+        }
+        KeyCode::Char('f') => {
+            // Toggle filter: show only rows without categories
+            state.filter_no_category = !state.filter_no_category;
+            state.cursor = 0;
+            state.scroll = 0;
+        }
+        KeyCode::Char('s') => {
+            // Toggle sort: by category vs by date
+            state.sort_by_category = !state.sort_by_category;
+            state.cursor = 0;
+            state.scroll = 0;
         }
         KeyCode::Enter => {
             // Commit import
