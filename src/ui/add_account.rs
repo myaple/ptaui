@@ -15,13 +15,19 @@ pub fn render_modal(f: &mut Frame, app: &App) {
 
     render_dim(f);
 
-    let area = centered_modal(90, 28, f.area());
+    let area = centered_modal(92, 30, f.area());
     f.render_widget(Clear, area);
+
+    let outer_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Add Account ");
+    let inner = outer_block.inner(area);
+    f.render_widget(outer_block, area);
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-        .split(area);
+        .split(inner);
 
     render_form(f, app, chunks[0]);
     render_help(f, app, chunks[1]);
@@ -197,11 +203,7 @@ fn render_form(f: &mut Frame, app: &App, area: Rect) {
         )));
     }
 
-    let para = Paragraph::new(lines).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(" Add Account "),
-    );
+    let para = Paragraph::new(lines).block(Block::default().borders(Borders::ALL));
     f.render_widget(para, area);
 }
 

@@ -14,14 +14,18 @@ const LIST_HEIGHT: usize = 18;
 pub fn render_modal(f: &mut Frame, app: &App) {
     render_dim(f);
 
-    let modal_height = (LIST_HEIGHT + 6) as u16;
-    let area = centered_modal(64, modal_height, f.area());
+    let modal_height = (LIST_HEIGHT + 8) as u16;
+    let area = centered_modal(66, modal_height, f.area());
     f.render_widget(Clear, area);
+
+    let outer_block = Block::default().borders(Borders::ALL);
+    let inner = outer_block.inner(area);
+    f.render_widget(outer_block, area);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(3)])
-        .split(area);
+        .split(inner);
 
     render_list(f, app, chunks[0]);
     render_help(f, chunks[1]);

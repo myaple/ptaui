@@ -20,8 +20,12 @@ pub fn render_modal(f: &mut Frame, app: &App) {
     let area = f.area();
     let modal_w = (area.width * 90 / 100).max(60);
     let modal_h = (area.height * 85 / 100).max(20);
-    let modal_area = centered_modal(modal_w, modal_h, area);
-    f.render_widget(Clear, modal_area);
+    let modal_outer = centered_modal(modal_w, modal_h, area);
+    f.render_widget(Clear, modal_outer);
+
+    let outer_block = Block::default().borders(Borders::ALL);
+    let modal_area = outer_block.inner(modal_outer);
+    f.render_widget(outer_block, modal_outer);
 
     // Step indicator at top
     let steps = ["1:File", "2:Account", "3:Columns", "4:Review"];
