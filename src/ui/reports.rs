@@ -479,29 +479,60 @@ fn render_net_worth_chart(
         return;
     }
 
-    let recent: Vec<_> = history.iter().rev().take(24).rev().collect();
+    // Split: Y-axis scale labels | chart (need chart width to compute stride)
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(10), Constraint::Min(0)])
+        .split(area);
 
-    // Use the largest absolute value as the chart ceiling so bars are
-    // proportional to |net worth|.  Red bars shrink as net worth approaches
-    // zero from below; green bars grow as net worth rises above zero.
-    let max_abs = recent
+    // Determine how many bars fit, then thin history to match.
+    let bar_width: u16 = 5;
+    let bar_gap: u16 = 1;
+    let chart_inner = (cols[1].width.saturating_sub(2)) as usize; // -2 for borders
+    let max_bars = (chart_inner / (bar_width + bar_gap) as usize).max(1);
+
+    let total = history.len();
+    let stride = if max_bars >= total {
+        1
+    } else {
+        total.div_ceil(max_bars)
+    };
+
+    // Sample from the end so the most recent data point is always included.
+    let mut sampled: Vec<&(String, rust_decimal::Decimal)> = history
+        .iter()
+        .rev()
+        .step_by(stride)
+        .take(max_bars)
+        .collect();
+    sampled.reverse(); // back to chronological order
+
+    let max_abs = sampled
         .iter()
         .map(|(_, v)| v.abs().to_f64().unwrap_or(0.0))
         .fold(0.0_f64, f64::max)
         .max(1.0);
+
+    render_net_worth_y_axis(f, &sampled, cols[0]);
 
     let mut chart = BarChart::default()
         .block(Block::default().borders(Borders::ALL).title(format!(
             " Net Worth Over Time ({}) — Tab→breakdown ",
             app.config.currency
         )))
-        .bar_width(5)
-        .bar_gap(1)
+        .bar_width(bar_width)
+        .bar_gap(bar_gap)
         .max(max_abs as u64);
 
-    for (month, net) in &recent {
+    for (month, net) in &sampled {
         let bar_val = (net.abs().to_f64().unwrap_or(0.0) as u64).max(1);
-        let label = month.get(5..7).unwrap_or(month.as_str()).to_string();
+        let label = if stride <= 1 {
+            month.get(5..7).unwrap_or(month.as_str()).to_string()
+        } else if stride >= 12 {
+            month.get(0..4).unwrap_or(month.as_str()).to_string()
+        } else {
+            format!("{}-{}", &month[2..4], &month[5..7])
+        };
 
         let color = if *net >= rust_decimal::Decimal::ZERO {
             Color::Green
@@ -513,12 +544,63 @@ fn render_net_worth_chart(
             .value(bar_val)
             .style(Style::default().fg(color))
             .value_style(Style::default().fg(Color::Black).bg(color))
-            .text_value(fmt_short_amount(*net));
+            .text_value(String::new());
 
         chart = chart.data(BarGroup::default().label(Line::from(label)).bars(&[bar]));
     }
 
-    f.render_widget(chart, area);
+    f.render_widget(chart, cols[1]);
+}
+
+/// Render Y-axis scale labels aligned with the bar chart's inner area.
+///
+/// Labels always show absolute values.  The bars being red/green already
+/// conveys positive/negative — the axis labels stay neutral.
+fn render_net_worth_y_axis(f: &mut Frame, recent: &[&(String, rust_decimal::Decimal)], area: Rect) {
+    let max_val = recent
+        .iter()
+        .map(|(_, v)| *v)
+        .max()
+        .unwrap_or(rust_decimal::Decimal::ZERO);
+    let min_val = recent
+        .iter()
+        .map(|(_, v)| *v)
+        .min()
+        .unwrap_or(rust_decimal::Decimal::ZERO);
+
+    // Chart top = the actual value whose |value| is largest (tallest bar).
+    let top_actual = if max_val.abs() >= min_val.abs() {
+        max_val
+    } else {
+        min_val
+    };
+    let mid_actual = top_actual / rust_decimal::Decimal::TWO;
+
+    let h = area.height as usize;
+    let mut lines: Vec<Line> = vec![Line::from(""); h];
+
+    let style = Style::default().fg(Color::DarkGray);
+
+    // Row 1 aligns with the chart's inner top (after its top border).
+    if h > 4 {
+        lines[1] = Line::from(Span::styled(
+            format!("{:>9}", fmt_short_amount(top_actual.abs())),
+            style,
+        ));
+    }
+    // Middle of chart.
+    if h > 8 {
+        lines[h / 2] = Line::from(Span::styled(
+            format!("{:>9}", fmt_short_amount(mid_actual.abs())),
+            style,
+        ));
+    }
+    // Row h-2 aligns with the chart's inner bottom (before its bottom border) = $0.
+    if h > 5 {
+        lines[h - 2] = Line::from(Span::styled(format!("{:>9}", "0"), style));
+    }
+
+    f.render_widget(Paragraph::new(lines), area);
 }
 
 fn fmt_short_amount(d: rust_decimal::Decimal) -> String {
