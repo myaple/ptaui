@@ -12,10 +12,13 @@ use std::collections::BTreeMap;
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let balances = app.ledger.balances();
 
-    // Group accounts by type (Assets, Liabilities, Income, Expenses, Equity)
+    // Group accounts by type — only show Assets and Liabilities
     let mut groups: BTreeMap<&str, Vec<(&str, String)>> = BTreeMap::new();
     for account in &app.ledger.accounts {
         let acct_type = account.name.split(':').next().unwrap_or("Other");
+        if acct_type != "Assets" && acct_type != "Liabilities" {
+            continue;
+        }
         let bal_str = if let Some(curs) = balances.get(&account.name) {
             curs.iter()
                 .map(|(cur, amt)| format!("{} {}", fmt_decimal(*amt), cur))
