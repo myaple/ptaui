@@ -11,16 +11,26 @@ use ratatui::{
 pub fn render_modal(f: &mut Frame, app: &App) {
     render_dim(f);
 
-    let area = centered_modal(44, 7, f.area());
+    let area = centered_modal(46, 9, f.area());
     f.render_widget(Clear, area);
+
+    let outer_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Red))
+        .title(Span::styled(
+            " Delete Transaction ",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ));
+    let inner = outer_block.inner(area);
+    f.render_widget(outer_block, area);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(0),    // message
-            Constraint::Length(3), // buttons
+            Constraint::Length(1), // buttons
         ])
-        .split(area);
+        .split(inner);
 
     // Message
     let msg = Paragraph::new(Line::from(vec![Span::styled(
@@ -28,16 +38,7 @@ pub fn render_modal(f: &mut Frame, app: &App) {
         Style::default()
             .fg(Color::White)
             .add_modifier(Modifier::BOLD),
-    )]))
-    .block(
-        Block::default()
-            .borders(Borders::LEFT | Borders::RIGHT | Borders::TOP)
-            .border_style(Style::default().fg(Color::Red))
-            .title(Span::styled(
-                " Delete Transaction ",
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-            )),
-    );
+    )]));
     f.render_widget(msg, chunks[0]);
 
     // Yes / No buttons
@@ -59,15 +60,10 @@ pub fn render_modal(f: &mut Frame, app: &App) {
     };
 
     let buttons = Paragraph::new(Line::from(vec![
-        Span::raw("    "),
+        Span::raw("  "),
         Span::styled("  Yes  ", yes_style),
         Span::raw("   "),
         Span::styled("  No  ", no_style),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::Red)),
-    );
+    ]));
     f.render_widget(buttons, chunks[1]);
 }

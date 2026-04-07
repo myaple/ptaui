@@ -23,15 +23,19 @@ fn render_modal_with_title(f: &mut Frame, app: &App, title: &str) {
 
     render_dim(f);
 
-    let area = centered_modal(100, 30, f.area());
+    let area = centered_modal(102, 32, f.area());
     f.render_widget(Clear, area);
+
+    let outer_block = Block::default().borders(Borders::ALL).title(title);
+    let inner = outer_block.inner(area);
+    f.render_widget(outer_block, area);
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
-        .split(area);
+        .split(inner);
 
-    render_form(f, app, chunks[0], title);
+    render_form(f, app, chunks[0]);
     render_suggestions_and_help(f, app, chunks[1]);
 }
 
@@ -55,7 +59,7 @@ fn field_style(focused: bool) -> Style {
     }
 }
 
-fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect, title: &str) {
+fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let form = app.add_tx_form.as_ref().unwrap();
 
     let fields: &[(AddTxField, &str, &str)] = &[
@@ -108,7 +112,7 @@ fn render_form(f: &mut Frame, app: &App, area: ratatui::layout::Rect, title: &st
     }
 
     f.render_widget(
-        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title)),
+        Paragraph::new(lines).block(Block::default().borders(Borders::ALL)),
         area,
     );
 }
