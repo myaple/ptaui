@@ -481,19 +481,14 @@ fn render_net_worth_chart(
 
     let recent: Vec<_> = history.iter().rev().take(24).rev().collect();
 
-    let max_val = recent
+    // Use the largest absolute value as the chart ceiling so bars are
+    // proportional to |net worth|.  Red bars shrink as net worth approaches
+    // zero from below; green bars grow as net worth rises above zero.
+    let max_abs = recent
         .iter()
         .map(|(_, v)| v.abs().to_f64().unwrap_or(0.0))
-        .fold(0.0_f64, f64::max);
-
-    let min_val = recent
-        .iter()
-        .map(|(_, v)| v.to_f64().unwrap_or(0.0))
-        .fold(0.0_f64, f64::min);
-
-    // We need to handle negative values by shifting the baseline
-    let baseline = if min_val < 0.0 { min_val } else { 0.0 };
-    let range = max_val - baseline;
+        .fold(0.0_f64, f64::max)
+        .max(1.0);
 
     let mut chart = BarChart::default()
         .block(Block::default().borders(Borders::ALL).title(format!(
@@ -501,12 +496,11 @@ fn render_net_worth_chart(
             app.config.currency
         )))
         .bar_width(5)
-        .bar_gap(1);
+        .bar_gap(1)
+        .max(max_abs as u64);
 
     for (month, net) in &recent {
-        let val = net.to_f64().unwrap_or(0.0);
-        // Shift by baseline so negative values still show as bars
-        let bar_val = ((val - baseline).max(0.0) as u64).max(1);
+        let bar_val = (net.abs().to_f64().unwrap_or(0.0) as u64).max(1);
         let label = month.get(5..7).unwrap_or(month.as_str()).to_string();
 
         let color = if *net >= rust_decimal::Decimal::ZERO {
@@ -522,11 +516,6 @@ fn render_net_worth_chart(
             .text_value(fmt_short_amount(*net));
 
         chart = chart.data(BarGroup::default().label(Line::from(label)).bars(&[bar]));
-    }
-
-    // Set a manual max so bars are proportional
-    if range > 0.0 {
-        chart = chart.max((range as u64).max(1));
     }
 
     f.render_widget(chart, area);
