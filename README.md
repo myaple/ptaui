@@ -1,14 +1,16 @@
 # ptaui
 
-A terminal UI for plain text accounting with [beancount](https://beancount.github.io/).
+A terminal UI for [beancount](https://beancount.github.io/) plain text accounting.
 
 ## Features
 
-- **Account dashboard** — hierarchical view of all accounts with live balances
-- **Transaction list** — scrollable, reverse-chronological transaction history
-- **Add transactions** — guided double-entry form with account autocomplete
-- **Reports** — monthly income vs expenses bar chart + summary table
-- **bean-check integration** — validates your file after every write
+- **Accounts dashboard** — hierarchical view of assets and liabilities with color-coded balances and net worth summary
+- **Transaction list** — scrollable reverse-chronological history with account filtering and reconciliation mode
+- **Add/edit/delete transactions** — double-entry forms with payee memory (auto-fills category and account from last transaction with same payee)
+- **CSV import** — 4-step wizard with column mapping, date format configuration, duplicate detection, payee-based category auto-fill, and bulk category assignment
+- **Reports** — monthly income vs expenses bar chart, per-category breakdowns with drill-down into individual transactions
+- **bean-check** — validates your ledger after every write
+- **Git integration** — optional auto-commits after every change to your beancount file
 
 ## Quick Start
 
@@ -17,9 +19,7 @@ cargo build --release
 ./target/release/ptaui
 ```
 
-On first run, a default config is created at `~/.config/ptaui/config.json`.
-
-Point it at your beancount file:
+On first run, a config is created at `~/.config/ptaui/config.json`. Edit it to point at your ledger:
 
 ```json
 {
@@ -29,25 +29,81 @@ Point it at your beancount file:
 }
 ```
 
-A demo file is provided at `examples/demo.beancount`.
+A sample ledger is at `examples/demo.beancount`.
 
 ## Keybindings
 
+### Navigation
+
 | Key | Action |
 |-----|--------|
-| `1` | Accounts & Balances |
-| `2` | Transaction List |
-| `3` | Add Transaction |
-| `4` | Reports |
-| `r` | Reload ledger from disk |
+| `1` | Accounts tab |
+| `2` | Transactions tab |
+| `3` | Reports tab |
 | `q` | Quit |
-| `↑↓` / `jk` | Scroll |
-| `Tab` | Next field / autocomplete account |
-| `Shift+Tab` | Previous field |
-| `Enter` | Confirm / submit |
-| `Esc` | Cancel / back |
+| `r` | Reload ledger from disk |
+
+### Accounts tab
+
+| Key | Action |
+|-----|--------|
+| `j/k` or arrows | Scroll |
+| `a` | Add account |
+
+### Transactions tab
+
+| Key | Action |
+|-----|--------|
+| `j/k` or arrows | Navigate |
+| `a` | Add transaction |
+| `e` | Edit transaction |
+| `d` | Delete transaction |
+| `f` | Filter by account |
+| `i` | CSV import |
+| `R` (shift) | Reconcile mode |
+
+### Reconcile mode
+
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle selection |
+| `r` | Mark reconciled (`*`) |
+| `u` | Mark unreconciled (`!`) |
+| `Esc` | Exit reconcile mode |
+
+### Reports tab
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Toggle monthly / category breakdown |
+| `h/l` or arrows | Change period |
+| `m` / `y` | Switch month / year view |
+| `c` | Filter accounts |
+| `Enter` | Drill into category transactions |
+
+### Forms (add/edit transaction, add account)
+
+| Key | Action |
+|-----|--------|
+| `Tab` / `Shift+Tab` | Next / previous field |
+| `Tab` (on payee/account/category) | Autocomplete |
+| `Enter` | Confirm |
+| `Esc` | Cancel |
+
+### CSV import wizard
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Path completion / autocomplete / next field |
+| `Left/Right` | Cycle column mapping |
+| `Space` | Toggle include row / toggle options |
+| `e` | Edit category for row |
+| `c` | Apply category to same payee (empty only) |
+| `C` | Apply category to all same payee |
+| `Enter` | Confirm step / commit import |
+| `Esc` | Back / cancel |
 
 ## Dependencies
 
 - Rust 1.75+
-- `bean-check` (optional, from `pip install beancount`) for validation
+- `bean-check` (optional, `pip install beancount`) for ledger validation
